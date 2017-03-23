@@ -1,8 +1,12 @@
 package merkle
 
 import (
+	"fmt"
+	"strings"
+
 	"bytes"
 	"container/list"
+	"encoding/json"
 	"sync"
 
 	. "github.com/tendermint/go-common"
@@ -193,6 +197,74 @@ func (t *IAVLTree) IterateRange(start, end []byte, ascending bool, fn func(key [
 			return false
 		}
 	})
+}
+
+type Formatter func(in []byte) (out string)
+
+type KeyValueMapping struct {
+	Key   Formatter
+	Value Formatter
+}
+
+func defaultMapping(value []byte) string {
+	return fmt.Sprintf("%X", value)
+}
+
+func valueMapping(value []byte) string {
+	// underneath make node, wire can throw a panic
+	defer func() {
+		if recover() != nil {
+			return
+		}
+	}()
+
+	// test to see if this is a node
+	node, err := MakeIAVLNode(value, nil)
+	if err == nil {
+		return nodeMapping(node)
+	}
+
+	// Unknown value type
+	return defaultMapping(value)
+}
+
+func nodeMapping(node *IAVLNode) string {
+	var prefix = "base/a/"
+
+	// The key might have come from basecoin
+	formattedKey := string(node.key)
+	if strings.HasPrefix(formattedKey, prefix) {
+		formattedKey = strings.TrimPrefix(formattedKey, prefix)
+	} else {
+		prefix = ""
+	}
+
+	formattedValue := json.RawMessage(wire.JSONBytes(node.value))
+
+	// Generic key, but still a node
+	return fmt.Sprintf("IAVLNode: [height: %d, key: %s%X, value: %X, hash: %X, leftHash: %X, rightHash: %X]",
+		node.height, prefix, formattedKey, formattedValue, node.hash, node.leftHash, node.rightHash)
+}
+
+// Dump everything in the database
+func (t *IAVLTree) Dump(mapping *KeyValueMapping) {
+	if t.root == nil {
+		fmt.Printf("No root loaded into memory\n")
+	}
+
+	if mapping == nil {
+		mapping = &KeyValueMapping{Key: defaultMapping, Value: valueMapping}
+	}
+
+	stats := t.ndb.db.Stats()
+	for key, value := range stats {
+		fmt.Printf("%s:\n\t%s\n", key, value)
+	}
+
+	iter := t.ndb.db.Iterator()
+	for iter.Next() {
+		fmt.Printf("DBkey: [%s]\n\t DBValue: [%s]\n", mapping.Key(iter.Key()), mapping.Value(iter.Value()))
+	}
 }
 
 //-----------------------------------------------------------------------------
