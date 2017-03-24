@@ -21,8 +21,10 @@ var (
 func main() {
 	kingpin.Parse()
 
-	if !cmn.FileExists(path.Join(*dir, *dbName+".db")) {
-		cmn.Exit("No such Database")
+	dbpath := path.Join(*dir, *dbName+".db")
+
+	if !cmn.FileExists(dbpath) {
+		cmn.Exit("No existing database: " + dbpath)
 	}
 
 	fmt.Printf("Dumping DB %s (%s)...\n", *dbName, *dbType)

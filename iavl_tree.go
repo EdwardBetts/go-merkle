@@ -6,7 +6,6 @@ import (
 
 	"bytes"
 	"container/list"
-	"encoding/json"
 	"sync"
 
 	. "github.com/tendermint/go-common"
@@ -239,11 +238,9 @@ func nodeMapping(node *IAVLNode) string {
 		prefix = ""
 	}
 
-	formattedValue := json.RawMessage(wire.JSONBytes(node.value))
-
 	// Generic key, but still a node
 	return fmt.Sprintf("IAVLNode: [height: %d, key: %s%X, value: %X, hash: %X, leftHash: %X, rightHash: %X]",
-		node.height, prefix, formattedKey, formattedValue, node.hash, node.leftHash, node.rightHash)
+		node.height, prefix, formattedKey, node.value, node.hash, node.leftHash, node.rightHash)
 }
 
 // Dump everything in the database
@@ -263,7 +260,7 @@ func (t *IAVLTree) Dump(mapping *KeyValueMapping) {
 
 	iter := t.ndb.db.Iterator()
 	for iter.Next() {
-		fmt.Printf("DBkey: [%s]\n\t DBValue: [%s]\n", mapping.Key(iter.Key()), mapping.Value(iter.Value()))
+		fmt.Printf("DBkey: [%s] DBValue: [%s]\n", mapping.Key(iter.Key()), mapping.Value(iter.Value()))
 	}
 }
 
