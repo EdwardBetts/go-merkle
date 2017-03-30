@@ -51,10 +51,11 @@ func stateMapping(value []byte) string {
 	return fmt.Sprintf("Height:%d,[%X]", s.Height, s.Hash)
 }
 
+// This is basecoin accounts, that it is writing to a specific key
 type account struct {
-	PubKey   [32]byte
+	PubKey   []byte
 	Sequence int
-	Balance  [1]coin
+	Balance  []coin
 }
 
 type wrapper struct {
