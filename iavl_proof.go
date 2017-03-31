@@ -2,10 +2,11 @@ package merkle
 
 import (
 	"bytes"
+	"fmt"
 
 	"golang.org/x/crypto/ripemd160"
 
-	. "github.com/tendermint/go-common"
+	cmn "github.com/tendermint/go-common"
 	"github.com/tendermint/go-wire"
 )
 
@@ -17,20 +18,28 @@ type IAVLProof struct {
 	RootHash   []byte
 }
 
-func (proof *IAVLProof) Verify(key []byte, value []byte, root []byte) bool {
+func (proof *IAVLProof) Verify(key []byte, value []byte, root []byte, version int) bool {
 	if !bytes.Equal(proof.RootHash, root) {
+		fmt.Printf("Verify Failed: Roots don't match\n")
 		return false
 	}
 	leafNode := IAVLProofLeafNode{KeyBytes: key, ValueBytes: value}
-	leafHash := leafNode.Hash()
+	leafHash := leafNode.Hash(version)
 	if !bytes.Equal(leafHash, proof.LeafHash) {
+		fmt.Printf("Verify Failed: Leafs don't match %s vs %s\n", value, string(leafNode.ValueBytes))
+		fmt.Printf("%X\n%X\n", leafHash, proof.LeafHash)
 		return false
 	}
 	hash := leafHash
 	for _, branch := range proof.InnerNodes {
 		hash = branch.Hash(hash)
 	}
-	return bytes.Equal(proof.RootHash, hash)
+	if bytes.Equal(proof.RootHash, hash) {
+		return true
+	} else {
+		fmt.Printf("Verify Failed: Aunts don't add up\n")
+		return false
+	}
 }
 
 // Please leave this here!  I use it in light-client to fulfill an interface
@@ -67,7 +76,7 @@ func (branch IAVLProofInnerNode) Hash(childHash []byte) []byte {
 		wire.WriteByteSlice(childHash, buf, &n, &err)
 	}
 	if err != nil {
-		PanicCrisis(Fmt("Failed to hash IAVLProofInnerNode: %v", err))
+		cmn.PanicCrisis(cmn.Fmt("Failed to hash IAVLProofInnerNode: %v", err))
 	}
 	// fmt.Printf("InnerNode hash bytes: %X\n", buf.Bytes())
 	hasher.Write(buf.Bytes())
@@ -79,7 +88,7 @@ type IAVLProofLeafNode struct {
 	ValueBytes []byte
 }
 
-func (leaf IAVLProofLeafNode) Hash() []byte {
+func (leaf IAVLProofLeafNode) Hash(version int) []byte {
 	hasher := ripemd160.New()
 	buf := new(bytes.Buffer)
 	n, err := int(0), error(nil)
@@ -87,8 +96,9 @@ func (leaf IAVLProofLeafNode) Hash() []byte {
 	wire.WriteVarint(1, buf, &n, &err)
 	wire.WriteByteSlice(leaf.KeyBytes, buf, &n, &err)
 	wire.WriteByteSlice(leaf.ValueBytes, buf, &n, &err)
+	wire.WriteVarint(version, buf, &n, &err)
 	if err != nil {
-		PanicCrisis(Fmt("Failed to hash IAVLProofLeafNode: %v", err))
+		cmn.PanicCrisis(cmn.Fmt("Failed to hash IAVLProofLeafNode: %v", err))
 	}
 	// fmt.Printf("LeafNode hash bytes:   %X\n", buf.Bytes())
 	hasher.Write(buf.Bytes())
@@ -137,15 +147,18 @@ func (node *IAVLNode) constructProof(t *IAVLTree, key []byte, valuePtr *[]byte, 
 
 // Returns nil, nil if key is not in tree.
 func (t *IAVLTree) ConstructProof(key []byte) (value []byte, proof *IAVLProof) {
-	if t.root == nil {
+	root := t.GetRoot(t.version)
+	if root == nil {
+		fmt.Printf("Missing Root in Proof\n")
 		return nil, nil
 	}
-	t.root.hashWithCount(t) // Ensure that all hashes are calculated.
+	root.hashWithCount(t) // Ensure that all hashes are calculated.
 	proof = &IAVLProof{
-		RootHash: t.root.hash,
+		RootHash: root.hash,
 	}
-	exists := t.root.constructProof(t, key, &value, proof)
+	exists := root.constructProof(t, key, &value, proof)
 	if exists {
+		fmt.Printf("ConstructProof on value=%s\n", value)
 		return value, proof
 	} else {
 		return nil, nil

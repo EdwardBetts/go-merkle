@@ -94,8 +94,8 @@ func nodeMapping(node *IAVLNode) string {
 
 // Dump everything in the database
 func (t *IAVLTree) Dump(mapping *KeyValueMapping) {
-	if t.root == nil {
-		fmt.Printf("No root loaded into memory\n")
+	if t.roots == nil {
+		fmt.Printf("No tree loaded into memory\n")
 	}
 
 	if mapping == nil {

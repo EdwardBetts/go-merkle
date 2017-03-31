@@ -64,7 +64,7 @@ func T(n *IAVLNode) *IAVLTree {
 	t := NewIAVLTree(0, d)
 
 	n.hashWithCount(t)
-	t.root = n
+	t.roots[0] = n
 	return t
 }
 
@@ -163,7 +163,8 @@ func TestUnit(t *testing.T) {
 			t.Fatalf("Expected %v new hashes, got %v", hashCount, count)
 		}
 		// nuke hashes and reconstruct hash, ensure it's the same.
-		tree.root.traverse(tree, true, func(node *IAVLNode) bool {
+		root := tree.GetRoot(tree.version)
+		root.traverse(tree, true, func(node *IAVLNode) bool {
 			node.hash = nil
 			return false
 		})
@@ -175,29 +176,29 @@ func TestUnit(t *testing.T) {
 	}
 
 	expectSet := func(tree *IAVLTree, i int, repr string, hashCount int) {
-		origNode := tree.root
+		origNode := tree.GetRoot(tree.version)
 		updated := tree.Set(i2b(i), nil)
 		// ensure node was added & structure is as expected.
-		if updated == true || P(tree.root) != repr {
+		if updated == true || P(tree.GetRoot(tree.version)) != repr {
 			t.Fatalf("Adding %v to %v:\nExpected         %v\nUnexpectedly got %v updated:%v",
-				i, P(origNode), repr, P(tree.root), updated)
+				i, P(origNode), repr, P(tree.GetRoot(tree.version)), updated)
 		}
 		// ensure hash calculation requirements
 		expectHash(tree, hashCount)
-		tree.root = origNode
+		tree.roots[0] = origNode
 	}
 
 	expectRemove := func(tree *IAVLTree, i int, repr string, hashCount int) {
-		origNode := tree.root
+		origNode := tree.GetRoot(tree.version)
 		value, removed := tree.Remove(i2b(i))
 		// ensure node was added & structure is as expected.
-		if len(value) != 0 || !removed || P(tree.root) != repr {
+		if len(value) != 0 || !removed || P(tree.GetRoot(tree.version)) != repr {
 			t.Fatalf("Removing %v from %v:\nExpected         %v\nUnexpectedly got %v value:%v removed:%v",
-				i, P(origNode), repr, P(tree.root), value, removed)
+				i, P(origNode), repr, P(tree.GetRoot(tree.version)), value, removed)
 		}
 		// ensure hash calculation requirements
 		expectHash(tree, hashCount)
-		tree.root = origNode
+		tree.roots[0] = origNode
 	}
 
 	//////// Test Set cases:
@@ -477,13 +478,13 @@ func TestPersistence(t *testing.T) {
 
 func testProof(t *testing.T, proof *IAVLProof, keyBytes, valueBytes, rootHashBytes []byte) {
 	// Proof must verify.
-	require.True(t, proof.Verify(keyBytes, valueBytes, rootHashBytes))
+	require.True(t, proof.Verify(keyBytes, valueBytes, rootHashBytes, 0))
 
 	// Write/Read then verify.
 	proofBytes := wire.BinaryBytes(proof)
 	proof2, err := ReadProof(proofBytes)
 	require.Nil(t, err, "Failed to read IAVLProof from bytes: %v", err)
-	require.True(t, proof2.Verify(keyBytes, valueBytes, proof.RootHash))
+	require.True(t, proof2.Verify(keyBytes, valueBytes, proof.RootHash, 0))
 
 	// Random mutations must not verify
 	for i := 0; i < 10; i++ {
@@ -491,7 +492,7 @@ func testProof(t *testing.T, proof *IAVLProof, keyBytes, valueBytes, rootHashByt
 		badProof, err := ReadProof(badProofBytes)
 		// may be invalid... errors are okay
 		if err == nil {
-			assert.False(t, badProof.Verify(keyBytes, valueBytes, rootHashBytes),
+			assert.False(t, badProof.Verify(keyBytes, valueBytes, rootHashBytes, 0),
 				"Proof was still valid after a random mutation:\n%X\n%X",
 				proofBytes, badProofBytes)
 		}
@@ -499,9 +500,9 @@ func testProof(t *testing.T, proof *IAVLProof, keyBytes, valueBytes, rootHashByt
 
 	// targetted changes fails...
 	proof.RootHash = MutateByteSlice(proof.RootHash)
-	assert.False(t, proof.Verify(keyBytes, valueBytes, rootHashBytes))
+	assert.False(t, proof.Verify(keyBytes, valueBytes, rootHashBytes, 0))
 	proof2.LeafHash = MutateByteSlice(proof2.LeafHash)
-	assert.False(t, proof2.Verify(keyBytes, valueBytes, rootHashBytes))
+	assert.False(t, proof2.Verify(keyBytes, valueBytes, rootHashBytes, 0))
 }
 
 func TestIAVLProof(t *testing.T) {
@@ -554,13 +555,13 @@ func TestIAVLTreeProof(t *testing.T) {
 	assert.False(t, exists)
 
 	// valid proof for real keys
-	root := tree.Hash()
+	hash := tree.Hash()
 	for _, key := range keys {
 		value, proofBytes, exists := tree.Proof(key)
 		if assert.True(t, exists) {
 			proof, err := ReadProof(proofBytes)
 			require.Nil(t, err, "Failed to read IAVLProof from bytes: %v", err)
-			assert.True(t, proof.Verify(key, value, root))
+			assert.True(t, proof.Verify(key, value, hash, 0))
 		}
 	}
 }
