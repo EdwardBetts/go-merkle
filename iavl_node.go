@@ -2,11 +2,12 @@ package merkle
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 
 	"golang.org/x/crypto/ripemd160"
 
-	. "github.com/tendermint/go-common"
+	cmn "github.com/tendermint/go-common"
 	"github.com/tendermint/go-wire"
 )
 
@@ -17,6 +18,7 @@ type IAVLNode struct {
 	value     []byte
 	height    int8
 	size      int
+	version   int
 	hash      []byte
 	leftHash  []byte
 	leftNode  *IAVLNode
@@ -42,20 +44,30 @@ func MakeIAVLNode(buf []byte, t *IAVLTree) (node *IAVLNode, err error) {
 	// node header
 	node.height = int8(buf[0])
 	buf = buf[1:]
+
 	var n int
 	node.size, n, err = wire.GetVarint(buf)
 	if err != nil {
 		return nil, err
 	}
 	buf = buf[n:]
+
 	node.key, n, err = wire.GetByteSlice(buf)
 	if err != nil {
 		return nil, err
 	}
 	buf = buf[n:]
+
 	if node.height == 0 {
 		// value
 		node.value, n, err = wire.GetByteSlice(buf)
+		if err != nil {
+			return nil, err
+		}
+		buf = buf[n:]
+
+		// version
+		node.version, n, err = wire.GetVarint(buf)
 		if err != nil {
 			return nil, err
 		}
@@ -80,7 +92,7 @@ func MakeIAVLNode(buf []byte, t *IAVLTree) (node *IAVLNode, err error) {
 
 func (node *IAVLNode) _copy() *IAVLNode {
 	if node.height == 0 {
-		PanicSanity("Why are you copying a value node?")
+		cmn.PanicSanity("Why are you copying a value node?")
 	}
 	return &IAVLNode{
 		key:       node.key,
@@ -137,7 +149,7 @@ func (node *IAVLNode) getByIndex(t *IAVLTree, index int) (key []byte, value []by
 		if index == 0 {
 			return node.key, node.value
 		} else {
-			PanicSanity("getByIndex asked for invalid index")
+			cmn.PanicSanity("getByIndex asked for invalid index")
 			return nil, nil
 		}
 	} else {
@@ -162,7 +174,7 @@ func (node *IAVLNode) hashWithCount(t *IAVLTree) ([]byte, int) {
 	buf := new(bytes.Buffer)
 	_, hashCount, err := node.writeHashBytes(t, buf)
 	if err != nil {
-		PanicCrisis(err)
+		cmn.PanicCrisis(err)
 	}
 	hasher.Write(buf.Bytes())
 	node.hash = hasher.Sum(nil)
@@ -181,6 +193,7 @@ func (node *IAVLNode) writeHashBytes(t *IAVLTree, w io.Writer) (n int, hashCount
 		// key & value
 		wire.WriteByteSlice(node.key, w, &n, &err)
 		wire.WriteByteSlice(node.value, w, &n, &err)
+		wire.WriteVarint(node.version, w, &n, &err)
 	} else {
 		// left
 		if node.leftNode != nil {
@@ -189,7 +202,7 @@ func (node *IAVLNode) writeHashBytes(t *IAVLTree, w io.Writer) (n int, hashCount
 			hashCount += leftCount
 		}
 		if node.leftHash == nil {
-			PanicSanity("node.leftHash was nil in writeHashBytes")
+			cmn.PanicSanity("node.leftHash was nil in writeHashBytes")
 		}
 		wire.WriteByteSlice(node.leftHash, w, &n, &err)
 		// right
@@ -199,7 +212,7 @@ func (node *IAVLNode) writeHashBytes(t *IAVLTree, w io.Writer) (n int, hashCount
 			hashCount += rightCount
 		}
 		if node.rightHash == nil {
-			PanicSanity("node.rightHash was nil in writeHashBytes")
+			cmn.PanicSanity("node.rightHash was nil in writeHashBytes")
 		}
 		wire.WriteByteSlice(node.rightHash, w, &n, &err)
 	}
@@ -242,15 +255,17 @@ func (node *IAVLNode) writePersistBytes(t *IAVLTree, w io.Writer) (n int, err er
 	if node.height == 0 {
 		// value
 		wire.WriteByteSlice(node.value, w, &n, &err)
+		wire.WriteVarint(node.version, w, &n, &err)
+
 	} else {
 		// left
 		if node.leftHash == nil {
-			PanicSanity("node.leftHash was nil in writePersistBytes")
+			cmn.PanicSanity("node.leftHash was nil in writePersistBytes")
 		}
 		wire.WriteByteSlice(node.leftHash, w, &n, &err)
 		// right
 		if node.rightHash == nil {
-			PanicSanity("node.rightHash was nil in writePersistBytes")
+			cmn.PanicSanity("node.rightHash was nil in writePersistBytes")
 		}
 		wire.WriteByteSlice(node.rightHash, w, &n, &err)
 	}
@@ -309,6 +324,7 @@ func (node *IAVLNode) remove(t *IAVLTree, key []byte) (
 			removeOrphan(t, node)
 			return nil, nil, nil, node.value, true
 		} else {
+			fmt.Printf("##### Removing Node that doesn't exist???")
 			return node.hash, node, nil, nil, false
 		}
 	} else {

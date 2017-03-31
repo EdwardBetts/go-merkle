@@ -31,7 +31,7 @@ import (
 
 	"golang.org/x/crypto/ripemd160"
 
-	. "github.com/tendermint/go-common"
+	cmn "github.com/tendermint/go-common"
 	"github.com/tendermint/go-wire"
 )
 
@@ -42,7 +42,7 @@ func SimpleHashFromTwoHashes(left []byte, right []byte) []byte {
 	wire.WriteByteSlice(left, hasher, &n, &err)
 	wire.WriteByteSlice(right, hasher, &n, &err)
 	if err != nil {
-		PanicCrisis(err)
+		cmn.PanicCrisis(err)
 	}
 	return hasher.Sum(nil)
 }
@@ -75,7 +75,7 @@ func SimpleHashFromBinary(item interface{}) []byte {
 	hasher, n, err := ripemd160.New(), new(int), new(error)
 	wire.WriteBinary(item, hasher, n, err)
 	if *err != nil {
-		PanicCrisis(err)
+		cmn.PanicCrisis(err)
 	}
 	return hasher.Sum(nil)
 }
@@ -117,7 +117,7 @@ func (kv KVPair) Hash() []byte {
 		wire.WriteBinary(kv.Value, hasher, n, err)
 	}
 	if *err != nil {
-		PanicSanity(*err)
+		cmn.PanicSanity(*err)
 	}
 	return hasher.Sum(nil)
 }
@@ -195,7 +195,7 @@ func computeHashFromAunts(index int, total int, leafHash []byte, innerHashes [][
 	}
 	switch total {
 	case 0:
-		PanicSanity("Cannot call computeHashFromAunts() with 0 total")
+		cmn.PanicSanity("Cannot call computeHashFromAunts() with 0 total")
 		return nil
 	case 1:
 		if len(innerHashes) != 0 {
