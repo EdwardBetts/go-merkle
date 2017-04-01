@@ -2,7 +2,7 @@ package merkle
 
 import (
 	"bytes"
-	"fmt"
+	//"fmt"
 	"io"
 
 	"golang.org/x/crypto/ripemd160"
@@ -324,7 +324,7 @@ func (node *IAVLNode) remove(t *IAVLTree, key []byte) (
 			removeOrphan(t, node)
 			return nil, nil, nil, node.value, true
 		} else {
-			fmt.Printf("##### Removing Node that doesn't exist???")
+			//fmt.Printf("##### Removing Node that doesn't exist???\n")
 			return node.hash, node, nil, nil, false
 		}
 	} else {
