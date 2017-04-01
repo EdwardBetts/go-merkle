@@ -20,14 +20,14 @@ type IAVLProof struct {
 
 func (proof *IAVLProof) Verify(key []byte, value []byte, root []byte, version int) bool {
 	if !bytes.Equal(proof.RootHash, root) {
-		fmt.Printf("Verify Failed: Roots don't match\n")
+		//fmt.Printf("Verify Failed: Roots don't match\n")
 		return false
 	}
 	leafNode := IAVLProofLeafNode{KeyBytes: key, ValueBytes: value}
 	leafHash := leafNode.Hash(version)
 	if !bytes.Equal(leafHash, proof.LeafHash) {
-		fmt.Printf("Verify Failed: Leafs don't match %s vs %s\n", value, string(leafNode.ValueBytes))
-		fmt.Printf("%X\n%X\n", leafHash, proof.LeafHash)
+		//fmt.Printf("Verify Failed: Leafs don't match '%X' vs '%X'\n", value, leafNode.ValueBytes)
+		//fmt.Printf("'%X'\n'%X'\n", leafHash, proof.LeafHash)
 		return false
 	}
 	hash := leafHash
@@ -37,7 +37,7 @@ func (proof *IAVLProof) Verify(key []byte, value []byte, root []byte, version in
 	if bytes.Equal(proof.RootHash, hash) {
 		return true
 	} else {
-		fmt.Printf("Verify Failed: Aunts don't add up\n")
+		//fmt.Printf("Verify Failed: Aunts don't add up\n")
 		return false
 	}
 }
@@ -158,7 +158,7 @@ func (t *IAVLTree) ConstructProof(key []byte) (value []byte, proof *IAVLProof) {
 	}
 	exists := root.constructProof(t, key, &value, proof)
 	if exists {
-		fmt.Printf("ConstructProof on value=%s\n", value)
+		//fmt.Printf("ConstructProof on value=%s\n", value)
 		return value, proof
 	} else {
 		return nil, nil

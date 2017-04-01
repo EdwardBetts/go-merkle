@@ -32,7 +32,7 @@ type IAVLTree struct {
 }
 
 func NewIAVLTree(cacheSize int, db dbm.DB) *IAVLTree {
-	fmt.Printf("NewIAVLTree\n")
+	//fmt.Printf("NewIAVLTree\n")
 	lastId++
 	if db == nil {
 		// In-memory IAVLTree
@@ -82,18 +82,16 @@ func SetValue(l *list.List, index int, value interface{}) {
 
 // GetRoot returns the correct root associated with a given version
 func (t *IAVLTree) GetRoot(version int) *IAVLNode {
-	fmt.Printf("GetRoot on id=%d version: %d Status: ", t.id, version)
+	//fmt.Printf("GetRoot on id=%d version: %d Status: ", t.id, version)
 	index := t.version - version
 
 	root := GetValue(t.roots, index)
 	if root == nil {
-		fmt.Printf("Missing Root %d for index %d\n", version, index)
+		//fmt.Printf("Missing Root %d for index %d\n", version, index)
 		return nil
 	}
 
-	//fmt.Printf("version %d nets index %d\n", version, index)
-	//fmt.Printf("root %v\n", t.roots[index])
-	fmt.Printf("Found\n")
+	//fmt.Printf("Found\n")
 	return root.(*IAVLNode)
 }
 
@@ -104,7 +102,7 @@ func (t *IAVLTree) GetRoot(version int) *IAVLNode {
 // Note that Save() clears leftNode and rightNode.  Otherwise,
 // two copies would not be goroutine independent.
 func (t *IAVLTree) Copy() Tree {
-	fmt.Printf("Copy ")
+	//fmt.Printf("Copy ")
 
 	root := t.GetRoot(t.version)
 	if t.roots == nil || root == nil {
@@ -143,7 +141,7 @@ func (t *IAVLTree) Copy() Tree {
 }
 
 func (t *IAVLTree) Size() int {
-	fmt.Printf("Version ")
+	//fmt.Printf("Version ")
 	root := t.GetRoot(t.version)
 	if root == nil {
 		return 0
@@ -152,7 +150,7 @@ func (t *IAVLTree) Size() int {
 }
 
 func (t *IAVLTree) Height() int8 {
-	fmt.Printf("Version ")
+	//fmt.Printf("Version ")
 	root := t.GetRoot(t.version)
 	if root == nil {
 		return 0
@@ -161,7 +159,7 @@ func (t *IAVLTree) Height() int8 {
 }
 
 func (t *IAVLTree) Version() int {
-	fmt.Printf("Version ")
+	//fmt.Printf("Version ")
 	root := t.GetRoot(t.version)
 	if root == nil {
 		return 0
@@ -170,7 +168,7 @@ func (t *IAVLTree) Version() int {
 }
 
 func (t *IAVLTree) Has(key []byte) bool {
-	fmt.Printf("Has ")
+	//fmt.Printf("Has ")
 	root := t.GetRoot(t.version)
 	if root == nil {
 		return false
@@ -180,10 +178,10 @@ func (t *IAVLTree) Has(key []byte) bool {
 
 // Proof of the latest key
 func (t *IAVLTree) Proof(key []byte) (value []byte, proofBytes []byte, exists bool) {
-	fmt.Printf("Proof ")
+	//fmt.Printf("Proof ")
 	value, proof := t.ConstructProof(key)
 	if proof == nil {
-		fmt.Printf("Missing Proof\n")
+		//fmt.Printf("Missing Proof\n")
 		return nil, nil, false
 	}
 	proofBytes = wire.BinaryBytes(proof)
@@ -192,7 +190,7 @@ func (t *IAVLTree) Proof(key []byte) (value []byte, proofBytes []byte, exists bo
 
 // Proof of a key at a specific version
 func (t *IAVLTree) ProofVersion(key []byte, version int) (value []byte, proofBytes []byte, exists bool) {
-	fmt.Printf("ProofVersion\n")
+	//fmt.Printf("ProofVersion\n")
 	value, proof := t.ConstructProof(key)
 	if proof == nil {
 		return nil, nil, false
@@ -202,18 +200,18 @@ func (t *IAVLTree) ProofVersion(key []byte, version int) (value []byte, proofByt
 }
 
 func (t *IAVLTree) Set(key []byte, value []byte) (updated bool) {
-	fmt.Printf("Set %s/%s ", key, value)
+	//fmt.Printf("Set %X/%X ", key, value)
 
 	root := t.GetRoot(t.version)
 	if root == nil {
-		fmt.Printf("Initializing Tree\n")
+		//fmt.Printf("Initializing Tree\n")
 
 		SetValue(t.roots, 0, NewIAVLNode(key, value))
 
 		return false
 	}
 
-	fmt.Printf("Added new Root\n")
+	//fmt.Printf("Added new Root\n")
 	root, updated = root.set(t, key, value)
 	SetValue(t.roots, 0, root)
 
@@ -221,7 +219,7 @@ func (t *IAVLTree) Set(key []byte, value []byte) (updated bool) {
 }
 
 func (t *IAVLTree) Hash() []byte {
-	fmt.Printf("Hash ")
+	//fmt.Printf("Hash ")
 	root := t.GetRoot(t.version)
 	if root == nil {
 		return nil
@@ -231,7 +229,7 @@ func (t *IAVLTree) Hash() []byte {
 }
 
 func (t *IAVLTree) HashWithCount() ([]byte, int) {
-	fmt.Printf("HashWithCount ")
+	//fmt.Printf("HashWithCount ")
 	root := t.GetRoot(t.version)
 	if root == nil {
 		return nil, 0
@@ -240,7 +238,7 @@ func (t *IAVLTree) HashWithCount() ([]byte, int) {
 }
 
 func (t *IAVLTree) Save() []byte {
-	fmt.Printf("****** Save ")
+	//fmt.Printf("****** Save ")
 	root := t.GetRoot(t.version)
 	if root == nil {
 		return nil
@@ -277,11 +275,11 @@ func (t *IAVLTree) Save() []byte {
 // Sets the root node by reading from db.
 // If the hash is empty, then sets root to nil.
 func (t *IAVLTree) Load(hash []byte) {
-	fmt.Printf("***** Loading a tree\n")
+	//fmt.Printf("***** Loading a tree\n")
 	if len(hash) == 0 {
 		SetValue(t.roots, 0, nil)
 	} else {
-		fmt.Printf("Loading Root\n")
+		//fmt.Printf("Loading Root\n")
 		t.ndb.GetVersion(t)
 		t.ndb.GetRoots(t)
 		t.ndb.GetDeletes()
@@ -290,10 +288,10 @@ func (t *IAVLTree) Load(hash []byte) {
 }
 
 func (t *IAVLTree) Get(key []byte) (index int, value []byte, exists bool) {
-	fmt.Printf("Get ")
+	//fmt.Printf("Get ")
 	root := t.GetRoot(t.version)
 	if root == nil {
-		fmt.Printf("Failed Get for %d\n", t.version)
+		//fmt.Printf("Failed Get for %d\n", t.version)
 		return 0, nil, false
 	}
 	return root.get(t, key)
@@ -316,7 +314,7 @@ func (t *IAVLTree) GetByIndex(index int) (key []byte, value []byte) {
 }
 
 func (t *IAVLTree) Remove(key []byte) (value []byte, removed bool) {
-	fmt.Printf("Remove ")
+	//fmt.Printf("Remove ")
 
 	root := t.GetRoot(t.version)
 	if root == nil {
@@ -338,7 +336,7 @@ func (t *IAVLTree) Remove(key []byte) (value []byte, removed bool) {
 }
 
 func (t *IAVLTree) Iterate(fn func(key []byte, value []byte) bool) (stopped bool) {
-	fmt.Printf("Iterate ")
+	//fmt.Printf("Iterate ")
 	root := t.GetRoot(t.version)
 	if root == nil {
 		return false
@@ -355,7 +353,7 @@ func (t *IAVLTree) Iterate(fn func(key []byte, value []byte) bool) (stopped bool
 // IterateRange makes a callback for all nodes with key between start and end inclusive
 // If either are nil, then it is open on that side (nil, nil is the same as Iterate)
 func (t *IAVLTree) IterateRange(start, end []byte, ascending bool, fn func(key []byte, value []byte) bool) (stopped bool) {
-	fmt.Printf("IterateRange ")
+	//fmt.Printf("IterateRange ")
 	root := t.GetRoot(t.version)
 	if root == nil {
 		return false
@@ -466,7 +464,7 @@ func (ndb *nodeDB) GetRoots(t *IAVLTree) {
 		}
 		buf = buf[n:]
 
-		fmt.Printf("Have Node: %X\n", bytes)
+		//fmt.Printf("Have Node: %X\n", bytes)
 		SetValue(t.roots, i, t.ndb.GetNode(t, bytes))
 	}
 }
@@ -505,12 +503,14 @@ func (ndb *nodeDB) GetOrphans(hash []byte) [][]byte {
 	key := orphansKey
 	key = append(key, hash...)
 
+	orphans := make([][]byte, 0)
+
 	buf := ndb.db.Get(key)
 	if len(buf) == 0 {
-		cmn.PanicSanity(cmn.Fmt("Orphans missing for key %X", key))
+		//cmn.PanicSanity(cmn.Fmt("Orphans missing for key %X", key))
+		//fmt.Printf("Missing orphans for key %X\n", key)
+		return orphans
 	}
-
-	orphans := make([][]byte, 0)
 
 	count := int(wire.GetInt32(buf))
 	buf = buf[4:]
