@@ -11,11 +11,12 @@ import (
 	wire "github.com/tendermint/go-wire"
 )
 
-var rootsKey = []byte("go-merkle:roots")     // Database key for the list of versions
-var orphansKey = []byte("go-merkle:orphans") // Database keys for each set of orphans
-var deletesKey = []byte("go-merkle:deletes") // Database key for nodes to be pruned
+var rootsKey = []byte("go-merkle:roots")      // Database key for the list of versions
+var versionKey = []byte("go-merkle:version")  // Database key for the list of versions
+var orphansKey = []byte("go-merkle:orphans/") // Partial Database keys for each set of orphans
+var deletesKey = []byte("go-merkle:deletes")  // Database key for roots to be pruned
 
-const versionCount = 10
+const versionMax = 10
 
 var lastId = 0
 
@@ -244,11 +245,31 @@ func (t *IAVLTree) Save() []byte {
 	if root == nil {
 		return nil
 	}
+	first := t.roots.Front()
+	firstNode := first.Value.(*IAVLNode)
+	last := t.roots.Back()
+
 	if t.ndb != nil {
 		root.save(t)
-		t.ndb.SaveVersions(t)
+		if t.roots.Len()+1 > versionMax {
+			lastNode := last.Value.(*IAVLNode)
+			t.ndb.deletes = append(t.ndb.deletes, lastNode.hash)
+			t.roots.Remove(last)
+			t.ndb.Prune()
+		}
+		t.ndb.SaveDeletes()
+		t.ndb.SaveOrphans(firstNode.hash, t.ndb.orphans)
+		t.ndb.SaveRoots(t)
+		t.ndb.SaveVersion(t)
 		t.ndb.Commit()
+	} else {
+		if t.roots.Len()+1 > versionMax {
+			t.roots.Remove(last)
+		}
 	}
+
+	t.ndb.orphans = make([][]byte, 0)
+	t.roots.InsertBefore(firstNode, first)
 	t.version++
 	return root.hash
 }
@@ -261,7 +282,9 @@ func (t *IAVLTree) Load(hash []byte) {
 		SetValue(t.roots, 0, nil)
 	} else {
 		fmt.Printf("Loading Root\n")
-		t.ndb.GetVersions(t)
+		t.ndb.GetVersion(t)
+		t.ndb.GetRoots(t)
+		t.ndb.GetDeletes()
 		SetValue(t.roots, 0, t.ndb.GetNode(t, hash))
 	}
 }
@@ -355,8 +378,8 @@ type nodeDB struct {
 	cacheQueue *list.List
 	db         dbm.DB
 	batch      dbm.Batch
-	orphans    map[string]struct{}
-	delete     map[string]struct{}
+	orphans    [][]byte
+	deletes    [][]byte
 }
 
 func newNodeDB(cacheSize int, db dbm.DB) *nodeDB {
@@ -366,8 +389,8 @@ func newNodeDB(cacheSize int, db dbm.DB) *nodeDB {
 		cacheQueue: list.New(),
 		db:         db,
 		batch:      db.NewBatch(),
-		orphans:    make(map[string]struct{}),
-		delete:     make(map[string]struct{}),
+		orphans:    make([][]byte, 0),
+		deletes:    make([][]byte, 0),
 	}
 	return ndb
 }
@@ -423,17 +446,16 @@ func (ndb *nodeDB) SaveNode(t *IAVLTree, node *IAVLNode) {
 
 	// Re-creating the orphan,
 	// Do not garbage collect.
-	delete(ndb.orphans, string(node.hash))
+	//delete(ndb.orphans, string(node.hash))
 }
 
-func (ndb *nodeDB) GetVersions(t *IAVLTree) {
+func (ndb *nodeDB) GetRoots(t *IAVLTree) {
 	buf := ndb.db.Get(rootsKey)
 	if len(buf) == 0 {
-		// ndb.db.Print()
 		cmn.PanicSanity(cmn.Fmt("Value missing for key %X", rootsKey))
 	}
 
-	fmt.Printf("Have Buffer: %X\n", buf)
+	//fmt.Printf("Have Versions: %X\n", buf)
 	count := int(wire.GetInt16(buf))
 	buf = buf[2:]
 
@@ -443,12 +465,13 @@ func (ndb *nodeDB) GetVersions(t *IAVLTree) {
 			cmn.PanicSanity(err)
 		}
 		buf = buf[n:]
+
 		fmt.Printf("Have Node: %X\n", bytes)
 		SetValue(t.roots, i, t.ndb.GetNode(t, bytes))
 	}
 }
 
-func (ndb *nodeDB) SaveVersions(t *IAVLTree) {
+func (ndb *nodeDB) SaveRoots(t *IAVLTree) {
 	buf, n, err := bytes.NewBuffer(nil), new(int), new(error)
 
 	wire.WriteInt16(int16(t.roots.Len()), buf, n, err)
@@ -457,6 +480,100 @@ func (ndb *nodeDB) SaveVersions(t *IAVLTree) {
 		wire.WriteByteSlice(value.hash, buf, n, err)
 	}
 	ndb.batch.Set(rootsKey, buf.Bytes())
+}
+
+func (ndb *nodeDB) GetVersion(t *IAVLTree) {
+	buf := ndb.db.Get(versionKey)
+	if len(buf) == 0 {
+		t.version = 0
+	}
+	version, _, err := wire.GetVarint(buf)
+	if err != nil {
+		cmn.PanicSanity(err)
+	}
+	t.version = version
+}
+
+func (ndb *nodeDB) SaveVersion(t *IAVLTree) {
+	buf, n, err := bytes.NewBuffer(nil), new(int), new(error)
+
+	wire.WriteVarint(t.version, buf, n, err)
+	ndb.batch.Set(versionKey, buf.Bytes())
+}
+
+func (ndb *nodeDB) GetOrphans(hash []byte) [][]byte {
+	key := orphansKey
+	key = append(key, hash...)
+
+	buf := ndb.db.Get(key)
+	if len(buf) == 0 {
+		cmn.PanicSanity(cmn.Fmt("Orphans missing for key %X", key))
+	}
+
+	orphans := make([][]byte, 0)
+
+	count := int(wire.GetInt32(buf))
+	buf = buf[4:]
+
+	for i := 0; i < count; i++ {
+		bytes, n, err := wire.GetByteSlice(buf)
+		if err != nil {
+			cmn.PanicSanity(err)
+		}
+		buf = buf[n:]
+		//fmt.Printf("Have Node: %X\n", bytes)
+
+		orphans = append(orphans, bytes)
+	}
+	return orphans
+}
+
+func (ndb *nodeDB) SaveOrphans(hash []byte, orphans [][]byte) {
+	key := orphansKey
+	key = append(key, hash...)
+
+	count := int32(len(ndb.orphans))
+
+	buf, n, err := bytes.NewBuffer(nil), new(int), new(error)
+	wire.WriteInt32(count, buf, n, err)
+	for i := 0; i < int(count); i++ {
+		hash := orphans[i]
+		wire.WriteByteSlice(hash, buf, n, err)
+	}
+	ndb.batch.Set(key, buf.Bytes())
+}
+
+func (ndb *nodeDB) GetDeletes() {
+	buf := ndb.db.Get(deletesKey)
+	if len(buf) == 0 {
+		cmn.PanicSanity(cmn.Fmt("Delete list is missing"))
+	}
+
+	//fmt.Printf("Have Versions: %X\n", buf)
+	count := int(wire.GetInt32(buf))
+	buf = buf[4:]
+
+	for i := 0; i < count; i++ {
+		bytes, n, err := wire.GetByteSlice(buf)
+		if err != nil {
+			cmn.PanicSanity(err)
+		}
+		buf = buf[n:]
+
+		ndb.deletes = append(ndb.deletes, bytes)
+	}
+}
+
+func (ndb *nodeDB) SaveDeletes() {
+	count := int32(len(ndb.deletes))
+
+	buf, n, err := bytes.NewBuffer(nil), new(int), new(error)
+	wire.WriteInt32(count, buf, n, err)
+	for i := 0; i < int(count); i++ {
+		hash := ndb.deletes[i]
+		wire.WriteByteSlice(hash, buf, n, err)
+	}
+	ndb.batch.Set(deletesKey, buf.Bytes())
 }
 
 func (ndb *nodeDB) RemoveNode(t *IAVLTree, node *IAVLNode) {
@@ -474,7 +591,7 @@ func (ndb *nodeDB) RemoveNode(t *IAVLTree, node *IAVLNode) {
 		ndb.cacheQueue.Remove(elem)
 		delete(ndb.cache, string(node.hash))
 	}
-	ndb.orphans[string(node.hash)] = struct{}{}
+	ndb.orphans = append(ndb.orphans, node.hash)
 }
 
 func (ndb *nodeDB) cacheNode(node *IAVLNode) {
@@ -489,10 +606,15 @@ func (ndb *nodeDB) cacheNode(node *IAVLNode) {
 }
 
 func (ndb *nodeDB) Prune() {
-	// Delete orphans from last block
-	for orphanHashStr, _ := range ndb.orphans {
-		ndb.batch.Delete([]byte(orphanHashStr))
+	// Clear out the delete slice from the database
+	for i := 0; i < len(ndb.deletes); i++ {
+		nodes := ndb.GetOrphans(ndb.deletes[i])
+		for j := 0; j < len(nodes); j++ {
+			ndb.batch.Delete(nodes[j])
+		}
 	}
+	ndb.deletes = make([][]byte, 0)
+	ndb.SaveDeletes()
 }
 
 func (ndb *nodeDB) Commit() {
@@ -505,5 +627,5 @@ func (ndb *nodeDB) Commit() {
 	ndb.batch = ndb.db.NewBatch()
 
 	// Shift orphans
-	ndb.orphans = make(map[string]struct{})
+	//ndb.orphans = make(map[string]struct{})
 }

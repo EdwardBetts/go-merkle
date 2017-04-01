@@ -64,7 +64,7 @@ func T(n *IAVLNode) *IAVLTree {
 	t := NewIAVLTree(0, d)
 
 	n.hashWithCount(t)
-	t.roots[0] = n
+	SetValue(t.roots, 0, n)
 	return t
 }
 
@@ -185,7 +185,7 @@ func TestUnit(t *testing.T) {
 		}
 		// ensure hash calculation requirements
 		expectHash(tree, hashCount)
-		tree.roots[0] = origNode
+		SetValue(tree.roots, 0, origNode)
 	}
 
 	expectRemove := func(tree *IAVLTree, i int, repr string, hashCount int) {
@@ -198,7 +198,7 @@ func TestUnit(t *testing.T) {
 		}
 		// ensure hash calculation requirements
 		expectHash(tree, hashCount)
-		tree.roots[0] = origNode
+		SetValue(tree.roots, 0, origNode)
 	}
 
 	//////// Test Set cases:
