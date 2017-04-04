@@ -525,7 +525,7 @@ func TestIAVLProof(t *testing.T) {
 
 	// Now for each item, construct a proof and verify
 	tree.Iterate(func(key []byte, value []byte) bool {
-		value2, proof := tree.ConstructProof(key)
+		value2, proof := tree.ConstructProof(key, tree.version)
 		assert.Equal(t, value, value2)
 		if assert.NotNil(t, proof) {
 			testProof(t, proof, key, value, tree.Hash())

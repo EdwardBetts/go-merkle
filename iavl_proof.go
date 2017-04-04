@@ -146,8 +146,8 @@ func (node *IAVLNode) constructProof(t *IAVLTree, key []byte, valuePtr *[]byte, 
 }
 
 // Returns nil, nil if key is not in tree.
-func (t *IAVLTree) ConstructProof(key []byte) (value []byte, proof *IAVLProof) {
-	root := t.GetRoot(t.version)
+func (t *IAVLTree) ConstructProof(key []byte, version int) (value []byte, proof *IAVLProof) {
+	root := t.GetRoot(version)
 	if root == nil {
 		fmt.Printf("Missing Root in Proof\n")
 		return nil, nil
