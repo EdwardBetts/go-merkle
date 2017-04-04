@@ -1,3 +1,7 @@
+/*
+	Package merkle implements a key/value store with an immutable Merkle tree.
+*/
+
 package merkle
 
 import (
@@ -11,11 +15,13 @@ import (
 	wire "github.com/tendermint/go-wire"
 )
 
+// Keys for administrative persistent data
 var rootsKey = []byte("go-merkle:roots")      // Database key for the list of versions
 var versionKey = []byte("go-merkle:version")  // Database key for the list of versions
 var orphansKey = []byte("go-merkle:orphans/") // Partial Database keys for each set of orphans
 var deletesKey = []byte("go-merkle:deletes")  // Database key for roots to be pruned
 
+// Fixed number of versions
 const versionMax = 10
 
 var lastId = 0
@@ -31,6 +37,7 @@ type IAVLTree struct {
 	id      int
 }
 
+// NewIAVLTree constructor for both persistent and memory based trees
 func NewIAVLTree(cacheSize int, db dbm.DB) *IAVLTree {
 	//fmt.Printf("NewIAVLTree\n")
 	lastId++
@@ -53,7 +60,7 @@ func NewIAVLTree(cacheSize int, db dbm.DB) *IAVLTree {
 	}
 }
 
-// A slow way to get the ith element's value
+// GetValue is a slow way to get the ith element's value
 func GetValue(l *list.List, index int) interface{} {
 	for e := l.Front(); e != nil; e = e.Next() {
 		index--
@@ -64,7 +71,7 @@ func GetValue(l *list.List, index int) interface{} {
 	return nil
 }
 
-// A slow way to set the ith element's value
+// SetValue is a slow way to set the ith element's value
 func SetValue(l *list.List, index int, value interface{}) {
 	for e := l.Front(); e != nil; e = e.Next() {
 		if index <= 0 {
@@ -140,6 +147,7 @@ func (t *IAVLTree) Copy() Tree {
 	}
 }
 
+// Size returns the number of internal and leaf nodes in the tree.
 func (t *IAVLTree) Size() int {
 	//fmt.Printf("Version ")
 	root := t.GetRoot(t.version)
@@ -149,6 +157,7 @@ func (t *IAVLTree) Size() int {
 	return root.size
 }
 
+// Height returns the maximum tree height.
 func (t *IAVLTree) Height() int8 {
 	//fmt.Printf("Version ")
 	root := t.GetRoot(t.version)
@@ -158,6 +167,7 @@ func (t *IAVLTree) Height() int8 {
 	return root.height
 }
 
+// Version is the latest uncommitted version number.
 func (t *IAVLTree) Version() int {
 	//fmt.Printf("Version ")
 	root := t.GetRoot(t.version)
@@ -218,6 +228,7 @@ func (t *IAVLTree) Set(key []byte, value []byte) (updated bool) {
 	return updated
 }
 
+// Hash returns the root hash for the tree
 func (t *IAVLTree) Hash() []byte {
 	//fmt.Printf("Hash ")
 	root := t.GetRoot(t.version)
@@ -237,6 +248,7 @@ func (t *IAVLTree) HashWithCount() ([]byte, int) {
 	return root.hashWithCount(t)
 }
 
+// Save this version of the tree
 func (t *IAVLTree) Save() []byte {
 	//fmt.Printf("****** Save ")
 	root := t.GetRoot(t.version)
@@ -287,6 +299,7 @@ func (t *IAVLTree) Load(hash []byte) {
 	}
 }
 
+// GetVersion finds the value for the current version
 func (t *IAVLTree) Get(key []byte) (index int, value []byte, exists bool) {
 	//fmt.Printf("Get ")
 	root := t.GetRoot(t.version)
@@ -297,6 +310,7 @@ func (t *IAVLTree) Get(key []byte) (index int, value []byte, exists bool) {
 	return root.get(t, key)
 }
 
+// GetVersion finds the value for an older committed version
 func (t *IAVLTree) GetVersion(key []byte, version int) (index int, value []byte, exists bool) {
 	root := t.GetRoot(version)
 	if root == nil {
@@ -305,6 +319,7 @@ func (t *IAVLTree) GetVersion(key []byte, version int) (index int, value []byte,
 	return root.get(t, key)
 }
 
+// GetByIndex the ith key and value
 func (t *IAVLTree) GetByIndex(index int) (key []byte, value []byte) {
 	root := t.GetRoot(t.version)
 	if root == nil {
@@ -313,6 +328,7 @@ func (t *IAVLTree) GetByIndex(index int) (key []byte, value []byte) {
 	return root.getByIndex(t, index)
 }
 
+// Remove a key from the tree
 func (t *IAVLTree) Remove(key []byte) (value []byte, removed bool) {
 	//fmt.Printf("Remove ")
 
@@ -335,6 +351,7 @@ func (t *IAVLTree) Remove(key []byte) (value []byte, removed bool) {
 	return value, true
 }
 
+// Iterate the leaf nodes, applying a function for each
 func (t *IAVLTree) Iterate(fn func(key []byte, value []byte) bool) (stopped bool) {
 	//fmt.Printf("Iterate ")
 	root := t.GetRoot(t.version)
@@ -369,6 +386,7 @@ func (t *IAVLTree) IterateRange(start, end []byte, ascending bool, fn func(key [
 
 //-----------------------------------------------------------------------------
 
+// nodeDB holds the database and any extra information necessary
 type nodeDB struct {
 	mtx        sync.Mutex
 	cache      map[string]*list.Element
@@ -543,6 +561,7 @@ func (ndb *nodeDB) SaveOrphans(hash []byte, orphans [][]byte) {
 	ndb.batch.Set(key, buf.Bytes())
 }
 
+// GetDeletes loads the full list of roots that need to be deleted
 func (ndb *nodeDB) GetDeletes() {
 	buf := ndb.db.Get(deletesKey)
 	if len(buf) == 0 {
@@ -564,6 +583,7 @@ func (ndb *nodeDB) GetDeletes() {
 	}
 }
 
+// SaveDeletes writes the list of roots to delete into the batch
 func (ndb *nodeDB) SaveDeletes() {
 	count := int32(len(ndb.deletes))
 
@@ -576,6 +596,7 @@ func (ndb *nodeDB) SaveDeletes() {
 	ndb.batch.Set(deletesKey, buf.Bytes())
 }
 
+// Remove node from cache and mark it as an orphan
 func (ndb *nodeDB) RemoveNode(t *IAVLTree, node *IAVLNode) {
 	ndb.mtx.Lock()
 	defer ndb.mtx.Unlock()
@@ -594,10 +615,13 @@ func (ndb *nodeDB) RemoveNode(t *IAVLTree, node *IAVLNode) {
 	ndb.orphans = append(ndb.orphans, node.hash)
 }
 
+// cacheNode enures that the node remains in memory
 func (ndb *nodeDB) cacheNode(node *IAVLNode) {
+
 	// Create entry in cache and append to cacheQueue.
 	elem := ndb.cacheQueue.PushBack(node)
 	ndb.cache[string(node.hash)] = elem
+
 	// Maybe expire an item.
 	if ndb.cacheQueue.Len() > ndb.cacheSize {
 		hash := ndb.cacheQueue.Remove(ndb.cacheQueue.Front()).(*IAVLNode).hash
@@ -605,6 +629,7 @@ func (ndb *nodeDB) cacheNode(node *IAVLNode) {
 	}
 }
 
+// Prune removes old orphans from the database
 func (ndb *nodeDB) Prune() {
 	// Clear out the delete slice from the database
 	for i := 0; i < len(ndb.deletes); i++ {
@@ -617,6 +642,7 @@ func (ndb *nodeDB) Prune() {
 	ndb.SaveDeletes()
 }
 
+// Commit the changes to the database
 func (ndb *nodeDB) Commit() {
 	ndb.mtx.Lock()
 	defer ndb.mtx.Unlock()
