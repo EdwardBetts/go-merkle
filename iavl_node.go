@@ -11,8 +11,7 @@ import (
 	"github.com/tendermint/go-wire"
 )
 
-// Node
-
+// Leaf and Inner nodes for an IAVLTree
 type IAVLNode struct {
 	key       []byte
 	value     []byte
@@ -107,11 +106,16 @@ func (node *IAVLNode) _copy() *IAVLNode {
 	}
 }
 
+// has checks to see if the tree contains a given key
 func (node *IAVLNode) has(t *IAVLTree, key []byte) (has bool) {
+
+	// Key is in a leaf or inner node
 	if bytes.Compare(node.key, key) == 0 {
 		return true
 	}
+
 	if node.height == 0 {
+		// Hit a leaf without finding the key
 		return false
 	} else {
 		if bytes.Compare(key, node.key) < 0 {
@@ -122,6 +126,7 @@ func (node *IAVLNode) has(t *IAVLTree, key []byte) (has bool) {
 	}
 }
 
+// get the leaf node with the given key
 func (node *IAVLNode) get(t *IAVLTree, key []byte) (index int, value []byte, exists bool) {
 	if node.height == 0 {
 		cmp := bytes.Compare(node.key, key)
@@ -144,6 +149,7 @@ func (node *IAVLNode) get(t *IAVLTree, key []byte) (index int, value []byte, exi
 	}
 }
 
+// getByIndex returns the key/value in the ith leaf position
 func (node *IAVLNode) getByIndex(t *IAVLTree, index int) (key []byte, value []byte) {
 	if node.height == 0 {
 		if index == 0 {
@@ -513,7 +519,7 @@ func (node *IAVLNode) traverseInRange(t *IAVLTree, start, end []byte, ascending 
 	return stop
 }
 
-// Only used in testing...
+// left-most-data Only used in testing...
 func (node *IAVLNode) lmd(t *IAVLTree) *IAVLNode {
 	if node.height == 0 {
 		return node
@@ -521,7 +527,7 @@ func (node *IAVLNode) lmd(t *IAVLTree) *IAVLNode {
 	return node.getLeftNode(t).lmd(t)
 }
 
-// Only used in testing...
+// right-most-data Only used in testing...
 func (node *IAVLNode) rmd(t *IAVLTree) *IAVLNode {
 	if node.height == 0 {
 		return node
@@ -532,9 +538,11 @@ func (node *IAVLNode) rmd(t *IAVLTree) *IAVLNode {
 //----------------------------------------
 
 func removeOrphan(t *IAVLTree, node *IAVLNode) {
+	// intermediate node, it will be garbage collected
 	if !node.persisted {
 		return
 	}
+	// an in memory tree
 	if t.ndb == nil {
 		return
 	}
