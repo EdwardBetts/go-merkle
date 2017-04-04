@@ -189,7 +189,7 @@ func (t *IAVLTree) Has(key []byte) bool {
 // Proof of the latest key
 func (t *IAVLTree) Proof(key []byte) (value []byte, proofBytes []byte, exists bool) {
 	//fmt.Printf("Proof ")
-	value, proof := t.ConstructProof(key)
+	value, proof := t.ConstructProof(key, t.version)
 	if proof == nil {
 		//fmt.Printf("Missing Proof\n")
 		return nil, nil, false
@@ -201,7 +201,7 @@ func (t *IAVLTree) Proof(key []byte) (value []byte, proofBytes []byte, exists bo
 // Proof of a key at a specific version
 func (t *IAVLTree) ProofVersion(key []byte, version int) (value []byte, proofBytes []byte, exists bool) {
 	//fmt.Printf("ProofVersion\n")
-	value, proof := t.ConstructProof(key)
+	value, proof := t.ConstructProof(key, version)
 	if proof == nil {
 		return nil, nil, false
 	}
