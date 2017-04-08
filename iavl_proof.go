@@ -2,7 +2,7 @@ package merkle
 
 import (
 	"bytes"
-	"fmt"
+	//"fmt"
 
 	"golang.org/x/crypto/ripemd160"
 
@@ -149,7 +149,7 @@ func (node *IAVLNode) constructProof(t *IAVLTree, key []byte, valuePtr *[]byte, 
 func (t *IAVLTree) ConstructProof(key []byte, version int) (value []byte, proof *IAVLProof) {
 	root := t.GetRoot(version)
 	if root == nil {
-		fmt.Printf("Missing Root in Proof\n")
+		//fmt.Printf("Missing Root in Proof\n")
 		return nil, nil
 	}
 	root.hashWithCount(t) // Ensure that all hashes are calculated.
