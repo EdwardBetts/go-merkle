@@ -16,13 +16,13 @@ import (
 )
 
 // Keys for administrative persistent data
-var rootsKey = []byte("go-merkle:roots")      // Database key for the list of versions
-var versionKey = []byte("go-merkle:version")  // Database key for the list of versions
-var orphansKey = []byte("go-merkle:orphans/") // Partial Database keys for each set of orphans
+var rootsKey = []byte("go-merkle:roots")      // Database key for the list of roots
+var versionKey = []byte("go-merkle:version")  // Database key for the version
+var orphansKey = []byte("go-merkle:orphans/") // Partial database key for each set of orphans
 var deletesKey = []byte("go-merkle:deletes")  // Database key for roots to be pruned
 
 // Fixed number of versions
-const versionMax = 10
+const rootsMax = 10
 
 var lastId = 0
 
@@ -76,6 +76,7 @@ func SetValue(l *list.List, index int, value interface{}) {
 	for e := l.Front(); e != nil; e = e.Next() {
 		if index <= 0 {
 			e.Value = value
+			return
 		}
 		index--
 	}
@@ -90,6 +91,11 @@ func SetValue(l *list.List, index int, value interface{}) {
 // GetRoot returns the correct root associated with a given version
 func (t *IAVLTree) GetRoot(version int) *IAVLNode {
 	//fmt.Printf("GetRoot on id=%d version: %d Status: ", t.id, version)
+
+	if t.roots.Len() > rootsMax {
+		cmn.PanicSanity("Too many Roots!")
+	}
+
 	index := t.version - version
 
 	root := GetValue(t.roots, index)
@@ -100,6 +106,15 @@ func (t *IAVLTree) GetRoot(version int) *IAVLNode {
 
 	//fmt.Printf("Found\n")
 	return root.(*IAVLNode)
+}
+
+func (t *IAVLTree) PrintRoots() {
+	fmt.Printf("version: %d count: %d\n", t.version, t.roots.Len())
+	i := 0
+	for e := t.roots.Front(); e != nil; e = e.Next() {
+		fmt.Printf("%d) %v\n", i, e.Value)
+		i++
+	}
 }
 
 // The returned tree and the original tree are goroutine independent.
@@ -209,6 +224,7 @@ func (t *IAVLTree) ProofVersion(key []byte, version int) (value []byte, proofByt
 	return value, proofBytes, true
 }
 
+// Set a value with a new key or an existing one
 func (t *IAVLTree) Set(key []byte, value []byte) (updated bool) {
 	//fmt.Printf("Set %X/%X ", key, value)
 
@@ -225,10 +241,13 @@ func (t *IAVLTree) Set(key []byte, value []byte) (updated bool) {
 	root, updated = root.set(t, key, value)
 	SetValue(t.roots, 0, root)
 
+	root = t.GetRoot(t.version) // TEST
+
 	return updated
 }
 
 // Hash returns the root hash for the tree
+// Should not be exposed, since it is just a step in saving
 func (t *IAVLTree) Hash() []byte {
 	//fmt.Printf("Hash ")
 	root := t.GetRoot(t.version)
@@ -239,6 +258,8 @@ func (t *IAVLTree) Hash() []byte {
 	return hash
 }
 
+// HashWithCount returns the root hash for the tree and the size of the tree
+// Should not be exposed, since it is just a step in saving
 func (t *IAVLTree) HashWithCount() ([]byte, int) {
 	//fmt.Printf("HashWithCount ")
 	root := t.GetRoot(t.version)
@@ -250,9 +271,12 @@ func (t *IAVLTree) HashWithCount() ([]byte, int) {
 
 // Save this version of the tree
 func (t *IAVLTree) Save() []byte {
-	//fmt.Printf("****** Save ")
+	//fmt.Printf("****** Save\n")
+	//t.PrintRoots()
+
 	root := t.GetRoot(t.version)
 	if root == nil {
+		//fmt.Printf("No root\n")
 		return nil
 	}
 	first := t.roots.Front()
@@ -261,7 +285,7 @@ func (t *IAVLTree) Save() []byte {
 
 	if t.ndb != nil {
 		root.save(t)
-		if t.roots.Len()+1 > versionMax {
+		if t.roots.Len()+1 > rootsMax {
 			lastNode := last.Value.(*IAVLNode)
 			t.ndb.deletes = append(t.ndb.deletes, lastNode.hash)
 			t.roots.Remove(last)
@@ -272,15 +296,22 @@ func (t *IAVLTree) Save() []byte {
 		t.ndb.SaveRoots(t)
 		t.ndb.SaveVersion(t)
 		t.ndb.Commit()
+		t.ndb.orphans = make([][]byte, 0)
 	} else {
-		if t.roots.Len()+1 > versionMax {
+		t.HashWithCount()
+		if t.roots.Len()+1 > rootsMax {
 			t.roots.Remove(last)
 		}
 	}
 
-	t.ndb.orphans = make([][]byte, 0)
 	t.roots.InsertBefore(firstNode, first)
 	t.version++
+
+	// What's the final status?
+	//t.PrintRoots()
+	root = t.GetRoot(t.version)
+	//fmt.Printf("root = '%X'\n", root.hash)
+
 	return root.hash
 }
 
@@ -347,6 +378,8 @@ func (t *IAVLTree) Remove(key []byte) (value []byte, removed bool) {
 	} else {
 		SetValue(t.roots, 0, newRoot)
 	}
+
+	root = t.GetRoot(t.version) // TEST
 
 	return value, true
 }

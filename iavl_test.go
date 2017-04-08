@@ -77,6 +77,176 @@ func P(n *IAVLNode) string {
 	}
 }
 
+const (
+	SETVALUE    = 0
+	REMOVEVALUE = 1
+	SAVETREE    = 2
+)
+
+type pair struct {
+	key   string
+	value string
+}
+
+type action struct {
+	cmd     int
+	pair    *pair
+	status  bool
+	comment string
+}
+
+func TestTable(t *testing.T) {
+	verbose := false
+
+	pairs := []pair{
+		pair{"aaaaa", "aaaaa"},
+		pair{"bbbbb", "bbbbb"},
+		pair{"ccccc", "ccccc"},
+		pair{"ddddd", "ddddd"},
+	}
+
+	actions := []action{
+		// Add four values
+		action{SETVALUE, &pairs[0], false, "Should be a create"},
+		action{SETVALUE, &pairs[1], false, "Should be a create"},
+		action{SETVALUE, &pairs[2], false, "Should be a create"},
+		action{SETVALUE, &pairs[3], false, "Should be a create"},
+		action{SAVETREE, nil, true, "Should return a value"},
+
+		// Modify two
+		action{SETVALUE, &pairs[2], true, "Should be an update"},
+		action{SETVALUE, &pairs[3], true, "Should be an update"},
+		action{SAVETREE, nil, true, "Should return a value"},
+
+		// Mess around
+		action{REMOVEVALUE, &pairs[2], true, "Should delete"},
+		action{SETVALUE, &pairs[2], false, "Should be an create"},
+		action{SETVALUE, &pairs[3], true, "Should be an update"},
+		action{SAVETREE, nil, true, "Should return a value"},
+	}
+
+	var tree *IAVLTree = NewIAVLTree(0, nil)
+	for i := range actions {
+		var status bool
+
+		switch actions[i].cmd {
+		case SETVALUE:
+			if verbose {
+				fmt.Printf("Doing a Set\n")
+			}
+			status = tree.Set([]byte(actions[i].pair.key), []byte(actions[i].pair.value))
+
+		case REMOVEVALUE:
+			if verbose {
+				fmt.Printf("Doing a Delete\n")
+			}
+			_, status = tree.Remove([]byte(actions[i].pair.key))
+
+		case SAVETREE:
+			if verbose {
+				fmt.Printf("Doing a Save\n")
+			}
+			bytes := tree.Save()
+			status = bytes != nil
+		}
+
+		if status != actions[i].status {
+			text := fmt.Sprintf("%d) %s", i, actions[i].comment)
+			t.Error(text)
+		}
+	}
+}
+
+func TestOrder(t *testing.T) {
+	var tree *IAVLTree = NewIAVLTree(0, nil)
+	var up bool
+	up = tree.Set([]byte("aaaaaa"), []byte("aaaaaa"))
+	if up {
+		t.Error("Did not expect an update (should have been create)")
+	}
+	up = tree.Set([]byte("bbbbbb"), []byte("bbbbbb"))
+	if up {
+		t.Error("Did not expect an update (should have been create)")
+	}
+	up = tree.Set([]byte("cccccc"), []byte("cccccc"))
+	if up {
+		t.Error("Did not expect an update (should have been create)")
+	}
+	up = tree.Set([]byte("dddddd"), []byte("dddddd"))
+	if up {
+		t.Error("Did not expect an update (should have been create)")
+	}
+	up = tree.Set([]byte("eeeeee"), []byte("eeeeeee"))
+	if up {
+		t.Error("Did not expect an update (should have been create)")
+	}
+	up = tree.Set([]byte("ffffff"), []byte("fffffff"))
+	if up {
+		t.Error("Did not expect an update (should have been create)")
+	}
+	up = tree.Set([]byte("gggggg"), []byte("ggggggg"))
+	if up {
+		t.Error("Did not expect an update (should have been create)")
+	}
+	for i := 0; i < 7; i++ {
+		key, value := tree.GetByIndex(i)
+		fmt.Printf("%d) %s - %s\n", i, string(key), string(value))
+	}
+}
+
+func TestHistory(t *testing.T) {
+	var tree *IAVLTree = NewIAVLTree(0, nil)
+	var up bool
+	up = tree.Set([]byte("1"), []byte("one"))
+	if up {
+		t.Error("Did not expect an update (should have been create)")
+	}
+	_, up = tree.Remove([]byte("1"))
+	if !up {
+		t.Error("Did not remove")
+	}
+	up = tree.Set([]byte("1"), []byte("one"))
+	if up {
+		t.Error("Expected an update (should have been create)")
+	}
+	bytes := tree.Save()
+	if bytes == nil {
+		t.Error("Saved should have worked, but got nothing")
+	}
+	up = tree.Set([]byte("1"), []byte("one"))
+	if !up {
+		t.Error("Expected an update (not a create)")
+	}
+	up = tree.Set([]byte("2"), []byte("two"))
+	if up {
+		t.Error("Expected an update (not a create)")
+	}
+	bytes = tree.Save()
+	if bytes == nil {
+		t.Error("Saved should have worked, but got nothing")
+	}
+	_, up = tree.Remove([]byte("1"))
+	if !up {
+		t.Error("Did not remove")
+	}
+	_, up = tree.Remove([]byte("2"))
+	if !up {
+		t.Error("Did not remove")
+	}
+	bytes = tree.Save()
+	if bytes != nil {
+		t.Error("Tree should have been empty")
+	}
+	up = tree.Set([]byte("1"), []byte("one"))
+	if up {
+		t.Error("Expected an create (not an update)")
+	}
+	bytes = tree.Save()
+	if bytes == nil {
+		t.Error("Saved should have worked, but got nothing")
+	}
+}
+
 func TestBasic(t *testing.T) {
 	var tree *IAVLTree = NewIAVLTree(0, nil)
 	var up bool
