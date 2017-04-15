@@ -103,6 +103,10 @@ func TestTable(t *testing.T) {
 		pair{"bbbbb", "bbbbb"},
 		pair{"ccccc", "ccccc"},
 		pair{"ddddd", "ddddd"},
+		pair{"1", "one"},
+		pair{"2", "two"},
+		pair{"3", "three"},
+		pair{"4", "four"},
 	}
 
 	actions := []action{
@@ -123,9 +127,16 @@ func TestTable(t *testing.T) {
 		action{SETVALUE, &pairs[2], false, "Should be an create"},
 		action{SETVALUE, &pairs[3], true, "Should be an update"},
 		action{SAVETREE, nil, true, "Should return a value"},
+
+		action{SETVALUE, &pairs[4], false, "Should be a create"},
+		action{SETVALUE, &pairs[5], false, "Should be a create"},
+		action{SETVALUE, &pairs[6], false, "Should be a create"},
+		action{SETVALUE, &pairs[7], false, "Should be a create"},
+		action{SAVETREE, nil, true, "Should return a value"},
 	}
 
-	var tree *IAVLTree = NewIAVLTree(0, nil)
+	db := db.NewDB("testing", "goleveldb", "./")
+	var tree *IAVLTree = NewIAVLTree(0, db)
 	for i := range actions {
 		var status bool
 

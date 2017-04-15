@@ -285,6 +285,8 @@ func (t *IAVLTree) Save() []byte {
 
 	if t.ndb != nil {
 		root.save(t)
+
+		// TODO: should be a loop, if the rootsMax can change
 		if t.roots.Len()+1 > rootsMax {
 			lastNode := last.Value.(*IAVLNode)
 			t.ndb.deletes = append(t.ndb.deletes, lastNode.hash)
@@ -664,13 +666,20 @@ func (ndb *nodeDB) cacheNode(node *IAVLNode) {
 
 // Prune removes old orphans from the database
 func (ndb *nodeDB) Prune() {
+
+	ndb.db.SetSync(nil, nil)
+	ndb.db.DeleteSync(nil)
+	batch := ndb.db.NewBatch()
+
 	// Clear out the delete slice from the database
 	for i := 0; i < len(ndb.deletes); i++ {
 		nodes := ndb.GetOrphans(ndb.deletes[i])
 		for j := 0; j < len(nodes); j++ {
-			ndb.batch.Delete(nodes[j])
+			batch.Delete(nodes[j])
 		}
 	}
+	batch.Write()
+
 	ndb.deletes = make([][]byte, 0)
 	ndb.SaveDeletes()
 }
