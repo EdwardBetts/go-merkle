@@ -93,11 +93,13 @@ func (t *IAVLTree) Proof(key []byte) (value []byte, proofBytes []byte, exists bo
 }
 
 func (t *IAVLTree) Set(key []byte, value []byte) (updated bool) {
+	k := make([]byte, len(key))
+	v := make([]byte, len(value))
 	if t.root == nil {
-		t.root = NewIAVLNode(key, value)
+		t.root = NewIAVLNode(k, v)
 		return false
 	}
-	t.root, updated = t.root.set(t, key, value)
+	t.root, updated = t.root.set(t, k, v)
 	return updated
 }
 
