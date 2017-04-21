@@ -574,6 +574,7 @@ func (ndb *nodeDB) SaveVersion(t *IAVLTree) {
 	ndb.batch.Set(versionKey, buf.Bytes())
 }
 
+// GetOrphans from the database, their key is the root hash
 func (ndb *nodeDB) GetOrphans(hash []byte) [][]byte {
 	key := orphansKey
 	key = append(key, hash...)
@@ -689,8 +690,8 @@ func (ndb *nodeDB) cacheNode(node *IAVLNode) {
 // Prune removes old orphans from the database
 func (ndb *nodeDB) Prune() {
 
-	ndb.db.SetSync(nil, nil)
-	ndb.db.DeleteSync(nil)
+	//ndb.db.SetSync(nil, nil)
+	//ndb.db.DeleteSync(nil)
 	batch := ndb.db.NewBatch()
 
 	// Clear out the delete slice from the database
@@ -710,6 +711,7 @@ func (ndb *nodeDB) Prune() {
 	ndb.deletes = make([][]byte, 0)
 	ndb.SaveDeletes(batch)
 
+	fmt.Printf("Writing out the Batch")
 	batch.Write()
 }
 

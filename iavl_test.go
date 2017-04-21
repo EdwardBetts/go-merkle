@@ -147,13 +147,13 @@ func TestTable(t *testing.T) {
 	db := db.NewDB("testing", "goleveldb", "./")
 	var tree *IAVLTree = NewIAVLTree(0, db)
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 40; i++ {
 		processActions(t, tree, actions)
 	}
 }
 
 func processActions(t *testing.T, tree *IAVLTree, actions []action) {
-	verbose := false
+	verbose := true
 
 	for i := range actions {
 		var status bool
