@@ -23,8 +23,8 @@ func (proof *IAVLProof) Verify(key []byte, value []byte, root []byte, version in
 		//fmt.Printf("Verify Failed: Roots don't match\n")
 		return false
 	}
-	leafNode := IAVLProofLeafNode{KeyBytes: key, ValueBytes: value}
-	leafHash := leafNode.Hash(version)
+	leafNode := IAVLProofLeafNode{KeyBytes: key, ValueBytes: value, Version: version}
+	leafHash := leafNode.Hash()
 	if !bytes.Equal(leafHash, proof.LeafHash) {
 		//fmt.Printf("Verify Failed: Leafs don't match '%X' vs '%X'\n", value, leafNode.ValueBytes)
 		//fmt.Printf("'%X'\n'%X'\n", leafHash, proof.LeafHash)
@@ -68,6 +68,8 @@ func (branch IAVLProofInnerNode) Hash(childHash []byte) []byte {
 	n, err := int(0), error(nil)
 	wire.WriteInt8(branch.Height, buf, &n, &err)
 	wire.WriteVarint(branch.Size, buf, &n, &err)
+
+	// Decide if inputted hash was a left or right one...
 	if len(branch.Left) == 0 {
 		wire.WriteByteSlice(childHash, buf, &n, &err)
 		wire.WriteByteSlice(branch.Right, buf, &n, &err)
@@ -86,9 +88,10 @@ func (branch IAVLProofInnerNode) Hash(childHash []byte) []byte {
 type IAVLProofLeafNode struct {
 	KeyBytes   []byte
 	ValueBytes []byte
+	Version    int
 }
 
-func (leaf IAVLProofLeafNode) Hash(version int) []byte {
+func (leaf IAVLProofLeafNode) Hash() []byte {
 	hasher := ripemd160.New()
 	buf := new(bytes.Buffer)
 	n, err := int(0), error(nil)
@@ -96,7 +99,7 @@ func (leaf IAVLProofLeafNode) Hash(version int) []byte {
 	wire.WriteVarint(1, buf, &n, &err)
 	wire.WriteByteSlice(leaf.KeyBytes, buf, &n, &err)
 	wire.WriteByteSlice(leaf.ValueBytes, buf, &n, &err)
-	wire.WriteVarint(version, buf, &n, &err)
+	wire.WriteVarint(leaf.Version, buf, &n, &err)
 	if err != nil {
 		cmn.PanicCrisis(cmn.Fmt("Failed to hash IAVLProofLeafNode: %v", err))
 	}
@@ -105,10 +108,11 @@ func (leaf IAVLProofLeafNode) Hash(version int) []byte {
 	return hasher.Sum(nil)
 }
 
-func (node *IAVLNode) constructProof(t *IAVLTree, key []byte, valuePtr *[]byte, proof *IAVLProof) (exists bool) {
+func (node *IAVLNode) constructProof(t *IAVLTree, key []byte, valuePtr *[]byte, versionPtr *int, proof *IAVLProof) (exists bool) {
 	if node.height == 0 {
 		if bytes.Compare(node.key, key) == 0 {
 			*valuePtr = node.value
+			*versionPtr = node.version
 			proof.LeafHash = node.hash
 			return true
 		} else {
@@ -116,7 +120,7 @@ func (node *IAVLNode) constructProof(t *IAVLTree, key []byte, valuePtr *[]byte, 
 		}
 	} else {
 		if bytes.Compare(key, node.key) < 0 {
-			exists := node.getLeftNode(t).constructProof(t, key, valuePtr, proof)
+			exists := node.getLeftNode(t).constructProof(t, key, valuePtr, versionPtr, proof)
 			if !exists {
 				return false
 			}
@@ -129,7 +133,7 @@ func (node *IAVLNode) constructProof(t *IAVLTree, key []byte, valuePtr *[]byte, 
 			proof.InnerNodes = append(proof.InnerNodes, branch)
 			return true
 		} else {
-			exists := node.getRightNode(t).constructProof(t, key, valuePtr, proof)
+			exists := node.getRightNode(t).constructProof(t, key, valuePtr, versionPtr, proof)
 			if !exists {
 				return false
 			}
@@ -146,21 +150,21 @@ func (node *IAVLNode) constructProof(t *IAVLTree, key []byte, valuePtr *[]byte, 
 }
 
 // Returns nil, nil if key is not in tree.
-func (t *IAVLTree) ConstructProof(key []byte, version int) (value []byte, proof *IAVLProof) {
+func (t *IAVLTree) ConstructProof(key []byte, version int) (value []byte, leafVersion int, proof *IAVLProof) {
 	root := t.GetRoot(version)
 	if root == nil {
 		//fmt.Printf("Missing Root in Proof\n")
-		return nil, nil
+		return nil, 0, nil
 	}
 	root.hashWithCount(t) // Ensure that all hashes are calculated.
 	proof = &IAVLProof{
 		RootHash: root.hash,
 	}
-	exists := root.constructProof(t, key, &value, proof)
+	exists := root.constructProof(t, key, &value, &leafVersion, proof)
 	if exists {
-		//fmt.Printf("ConstructProof on value=%s\n", value)
-		return value, proof
+		//fmt.Printf("ConstructProof on version=%d leafv=%d\n", version, leafVersion)
+		return value, leafVersion, proof
 	} else {
-		return nil, nil
+		return nil, 0, nil
 	}
 }

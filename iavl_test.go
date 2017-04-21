@@ -40,12 +40,12 @@ func N(l, r interface{}) *IAVLNode {
 	if _, ok := l.(*IAVLNode); ok {
 		left = l.(*IAVLNode)
 	} else {
-		left = NewIAVLNode(i2b(l.(int)), nil)
+		left = NewIAVLNode(i2b(l.(int)), nil, 0)
 	}
 	if _, ok := r.(*IAVLNode); ok {
 		right = r.(*IAVLNode)
 	} else {
-		right = NewIAVLNode(i2b(r.(int)), nil)
+		right = NewIAVLNode(i2b(r.(int)), nil, 0)
 	}
 
 	n := &IAVLNode{
@@ -96,7 +96,6 @@ type action struct {
 }
 
 func TestTable(t *testing.T) {
-	verbose := false
 
 	pairs := []pair{
 		pair{"aaaaa", "aaaaa"},
@@ -133,10 +132,29 @@ func TestTable(t *testing.T) {
 		action{SETVALUE, &pairs[6], false, "Should be a create"},
 		action{SETVALUE, &pairs[7], false, "Should be a create"},
 		action{SAVETREE, nil, true, "Should return a value"},
+
+		action{REMOVEVALUE, &pairs[0], true, "Should delete"},
+		action{REMOVEVALUE, &pairs[1], true, "Should delete"},
+		action{REMOVEVALUE, &pairs[2], true, "Should delete"},
+		action{REMOVEVALUE, &pairs[3], true, "Should delete"},
+		action{REMOVEVALUE, &pairs[4], true, "Should delete"},
+		action{REMOVEVALUE, &pairs[5], true, "Should delete"},
+		action{REMOVEVALUE, &pairs[6], true, "Should delete"},
+		action{REMOVEVALUE, &pairs[7], true, "Should delete"},
+		action{SAVETREE, nil, false, "Should not return a value"},
 	}
 
 	db := db.NewDB("testing", "goleveldb", "./")
 	var tree *IAVLTree = NewIAVLTree(0, db)
+
+	for i := 0; i < 10; i++ {
+		processActions(t, tree, actions)
+	}
+}
+
+func processActions(t *testing.T, tree *IAVLTree, actions []action) {
+	verbose := false
+
 	for i := range actions {
 		var status bool
 
@@ -168,7 +186,7 @@ func TestTable(t *testing.T) {
 	}
 }
 
-func TestOrder(t *testing.T) {
+func UnfinishedTestOrder(t *testing.T) {
 	var tree *IAVLTree = NewIAVLTree(0, nil)
 	var up bool
 	up = tree.Set([]byte("aaaaaa"), []byte("aaaaaa"))
@@ -657,15 +675,15 @@ func TestPersistence(t *testing.T) {
 	}
 }
 
-func testProof(t *testing.T, proof *IAVLProof, keyBytes, valueBytes, rootHashBytes []byte) {
+func testProof(t *testing.T, proof *IAVLProof, keyBytes, valueBytes, rootHashBytes []byte, version int) {
 	// Proof must verify.
-	require.True(t, proof.Verify(keyBytes, valueBytes, rootHashBytes, 0))
+	require.True(t, proof.Verify(keyBytes, valueBytes, rootHashBytes, version))
 
 	// Write/Read then verify.
 	proofBytes := wire.BinaryBytes(proof)
 	proof2, err := ReadProof(proofBytes)
 	require.Nil(t, err, "Failed to read IAVLProof from bytes: %v", err)
-	require.True(t, proof2.Verify(keyBytes, valueBytes, proof.RootHash, 0))
+	require.True(t, proof2.Verify(keyBytes, valueBytes, proof.RootHash, version))
 
 	// Random mutations must not verify
 	for i := 0; i < 10; i++ {
@@ -673,7 +691,7 @@ func testProof(t *testing.T, proof *IAVLProof, keyBytes, valueBytes, rootHashByt
 		badProof, err := ReadProof(badProofBytes)
 		// may be invalid... errors are okay
 		if err == nil {
-			assert.False(t, badProof.Verify(keyBytes, valueBytes, rootHashBytes, 0),
+			assert.False(t, badProof.Verify(keyBytes, valueBytes, rootHashBytes, version),
 				"Proof was still valid after a random mutation:\n%X\n%X",
 				proofBytes, badProofBytes)
 		}
@@ -681,9 +699,9 @@ func testProof(t *testing.T, proof *IAVLProof, keyBytes, valueBytes, rootHashByt
 
 	// targetted changes fails...
 	proof.RootHash = MutateByteSlice(proof.RootHash)
-	assert.False(t, proof.Verify(keyBytes, valueBytes, rootHashBytes, 0))
+	assert.False(t, proof.Verify(keyBytes, valueBytes, rootHashBytes, version))
 	proof2.LeafHash = MutateByteSlice(proof2.LeafHash)
-	assert.False(t, proof2.Verify(keyBytes, valueBytes, rootHashBytes, 0))
+	assert.False(t, proof2.Verify(keyBytes, valueBytes, rootHashBytes, version))
 }
 
 func TestIAVLProof(t *testing.T) {
@@ -706,10 +724,10 @@ func TestIAVLProof(t *testing.T) {
 
 	// Now for each item, construct a proof and verify
 	tree.Iterate(func(key []byte, value []byte) bool {
-		value2, proof := tree.ConstructProof(key, tree.version)
+		value2, version, proof := tree.ConstructProof(key, tree.version)
 		assert.Equal(t, value, value2)
 		if assert.NotNil(t, proof) {
-			testProof(t, proof, key, value, tree.Hash())
+			testProof(t, proof, key, value, tree.Hash(), version)
 		}
 		return false
 	})
@@ -742,7 +760,7 @@ func TestIAVLTreeProof(t *testing.T) {
 		if assert.True(t, exists) {
 			proof, err := ReadProof(proofBytes)
 			require.Nil(t, err, "Failed to read IAVLProof from bytes: %v", err)
-			assert.True(t, proof.Verify(key, value, hash, 0))
+			assert.True(t, proof.Verify(key, value, hash, tree.version))
 		}
 	}
 }

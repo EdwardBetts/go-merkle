@@ -22,7 +22,7 @@ var orphansKey = []byte("go-merkle:orphans/") // Partial database key for each s
 var deletesKey = []byte("go-merkle:deletes")  // Database key for roots to be pruned
 
 // Fixed number of versions
-const rootsMax = 10
+const rootsMax = 3
 
 var lastId = 0
 
@@ -109,10 +109,17 @@ func (t *IAVLTree) GetRoot(version int) *IAVLNode {
 }
 
 func (t *IAVLTree) PrintRoots() {
-	fmt.Printf("version: %d count: %d\n", t.version, t.roots.Len())
+	fmt.Printf("Roots version: %d count: %d\n", t.version, t.roots.Len())
 	i := 0
 	for e := t.roots.Front(); e != nil; e = e.Next() {
-		fmt.Printf("%d) %v\n", i, e.Value)
+
+		node := e.Value.(*IAVLNode)
+		if node == nil {
+			fmt.Printf("%d) <nil>\n", i)
+		} else {
+			fmt.Printf("%d) %s\n", i, node.Sprintf())
+		}
+
 		i++
 	}
 }
@@ -204,7 +211,7 @@ func (t *IAVLTree) Has(key []byte) bool {
 // Proof of the latest key
 func (t *IAVLTree) Proof(key []byte) (value []byte, proofBytes []byte, exists bool) {
 	//fmt.Printf("Proof ")
-	value, proof := t.ConstructProof(key, t.version)
+	value, _, proof := t.ConstructProof(key, t.version)
 	if proof == nil {
 		//fmt.Printf("Missing Proof\n")
 		return nil, nil, false
@@ -216,7 +223,7 @@ func (t *IAVLTree) Proof(key []byte) (value []byte, proofBytes []byte, exists bo
 // Proof of a key at a specific version
 func (t *IAVLTree) ProofVersion(key []byte, version int) (value []byte, proofBytes []byte, exists bool) {
 	//fmt.Printf("ProofVersion\n")
-	value, proof := t.ConstructProof(key, version)
+	value, _, proof := t.ConstructProof(key, version)
 	if proof == nil {
 		return nil, nil, false
 	}
@@ -232,7 +239,7 @@ func (t *IAVLTree) Set(key []byte, value []byte) (updated bool) {
 	if root == nil {
 		//fmt.Printf("Initializing Tree\n")
 
-		SetValue(t.roots, 0, NewIAVLNode(key, value))
+		SetValue(t.roots, 0, NewIAVLNode(key, value, t.version))
 
 		return false
 	}
@@ -271,6 +278,9 @@ func (t *IAVLTree) HashWithCount() ([]byte, int) {
 
 // Save this version of the tree
 func (t *IAVLTree) Save() []byte {
+	//t.ndb.mtx.Lock()
+	//defer t.ndb.mtx.Unlock()
+
 	//fmt.Printf("****** Save\n")
 	//t.PrintRoots()
 
@@ -287,27 +297,39 @@ func (t *IAVLTree) Save() []byte {
 		root.save(t)
 
 		// TODO: should be a loop, if the rootsMax can change
-		if t.roots.Len()+1 > rootsMax {
+		if rootsMax > 1 && t.roots.Len()+1 > rootsMax {
+			//fmt.Printf("##### Cleanup!!! ######\n")
 			lastNode := last.Value.(*IAVLNode)
+
+			// TODO: should be locking any changes to deletes?
 			t.ndb.deletes = append(t.ndb.deletes, lastNode.hash)
 			t.roots.Remove(last)
-			t.ndb.Prune()
+
+			t.ndb.SaveDeletes(t.ndb.batch)
 		}
-		t.ndb.SaveDeletes()
+
 		t.ndb.SaveOrphans(firstNode.hash, t.ndb.orphans)
+		t.ndb.orphans = make([][]byte, 0)
+
 		t.ndb.SaveRoots(t)
 		t.ndb.SaveVersion(t)
+
 		t.ndb.Commit()
-		t.ndb.orphans = make([][]byte, 0)
+
+		// TODO: Move to a separate go-routine?
+		t.ndb.Prune()
+
 	} else {
 		t.HashWithCount()
-		if t.roots.Len()+1 > rootsMax {
+		if rootsMax > 1 && t.roots.Len()+1 > rootsMax {
 			t.roots.Remove(last)
 		}
 	}
 
-	t.roots.InsertBefore(firstNode, first)
-	t.version++
+	if rootsMax > 1 {
+		t.roots.PushFront(firstNode)
+		t.version++
+	}
 
 	// What's the final status?
 	//t.PrintRoots()
@@ -619,7 +641,7 @@ func (ndb *nodeDB) GetDeletes() {
 }
 
 // SaveDeletes writes the list of roots to delete into the batch
-func (ndb *nodeDB) SaveDeletes() {
+func (ndb *nodeDB) SaveDeletes(batch dbm.Batch) {
 	count := int32(len(ndb.deletes))
 
 	buf, n, err := bytes.NewBuffer(nil), new(int), new(error)
@@ -628,7 +650,7 @@ func (ndb *nodeDB) SaveDeletes() {
 		hash := ndb.deletes[i]
 		wire.WriteByteSlice(hash, buf, n, err)
 	}
-	ndb.batch.Set(deletesKey, buf.Bytes())
+	batch.Set(deletesKey, buf.Bytes())
 }
 
 // Remove node from cache and mark it as an orphan
@@ -675,13 +697,20 @@ func (ndb *nodeDB) Prune() {
 	for i := 0; i < len(ndb.deletes); i++ {
 		nodes := ndb.GetOrphans(ndb.deletes[i])
 		for j := 0; j < len(nodes); j++ {
+			//fmt.Printf("Adding %X to be deleted\n", nodes[j])
 			batch.Delete(nodes[j])
 		}
+		//fmt.Printf("Adding root %X to be deleted\n", ndb.deletes[i])
+		batch.Delete(ndb.deletes[i])
 	}
-	batch.Write()
 
+	//TODO: Should be locking any changes to deletes.
+	//ndb.mtx.Lock()
+	//defer ndb.mtx.Unlock()
 	ndb.deletes = make([][]byte, 0)
-	ndb.SaveDeletes()
+	ndb.SaveDeletes(batch)
+
+	batch.Write()
 }
 
 // Commit the changes to the database
