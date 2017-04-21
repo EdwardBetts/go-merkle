@@ -2,7 +2,7 @@ package merkle
 
 type Tree interface {
 	Size() (size int)
-	Height() (height int8)
+	Height() (height int16)
 	Has(key []byte) (has bool)
 	Proof(key []byte) (value []byte, proof []byte, exists bool) // TODO make it return an index
 	Get(key []byte) (index int, value []byte, exists bool)

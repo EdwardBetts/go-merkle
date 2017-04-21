@@ -56,7 +56,7 @@ func ReadProof(data []byte) (*IAVLProof, error) {
 }
 
 type IAVLProofInnerNode struct {
-	Height int8
+	Height int16
 	Size   int
 	Left   []byte
 	Right  []byte
@@ -66,7 +66,7 @@ func (branch IAVLProofInnerNode) Hash(childHash []byte) []byte {
 	hasher := ripemd160.New()
 	buf := new(bytes.Buffer)
 	n, err := int(0), error(nil)
-	wire.WriteInt8(branch.Height, buf, &n, &err)
+	wire.WriteInt16(branch.Height, buf, &n, &err)
 	wire.WriteVarint(branch.Size, buf, &n, &err)
 
 	// Decide if inputted hash was a left or right one...
@@ -95,7 +95,7 @@ func (leaf IAVLProofLeafNode) Hash() []byte {
 	hasher := ripemd160.New()
 	buf := new(bytes.Buffer)
 	n, err := int(0), error(nil)
-	wire.WriteInt8(0, buf, &n, &err)
+	wire.WriteInt16(0, buf, &n, &err)
 	wire.WriteVarint(1, buf, &n, &err)
 	wire.WriteByteSlice(leaf.KeyBytes, buf, &n, &err)
 	wire.WriteByteSlice(leaf.ValueBytes, buf, &n, &err)

@@ -180,7 +180,7 @@ func processActions(t *testing.T, tree *IAVLTree, actions []action) {
 		}
 
 		if status != actions[i].status {
-			text := fmt.Sprintf("%d) %s", i, actions[i].comment)
+			text := fmt.Sprintf("%d) %s status=%v", i, actions[i].comment, status)
 			t.Error(text)
 		}
 	}

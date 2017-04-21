@@ -15,7 +15,7 @@ import (
 type IAVLNode struct {
 	key       []byte
 	value     []byte
-	height    int8
+	height    int16
 	size      int
 	version   int
 	hash      []byte
@@ -47,8 +47,10 @@ func MakeIAVLNode(buf []byte, t *IAVLTree) (node *IAVLNode, err error) {
 	node = &IAVLNode{}
 
 	// node header
-	node.height = int8(buf[0]) // TODO: Is this right?
-	buf = buf[1:]
+	node.height = wire.GetInt16(buf)
+	buf = buf[2:]
+	//node.height = int8(buf[0]) // TODO: Is this right?
+	//buf = buf[1:]
 
 	var n int
 	node.size, n, err = wire.GetVarint(buf)
@@ -197,7 +199,7 @@ func (node *IAVLNode) hashWithCount(t *IAVLTree) ([]byte, int) {
 // NOTE: sets hashes recursively
 func (node *IAVLNode) writeHashBytes(t *IAVLTree, w io.Writer) (n int, hashCount int, err error) {
 	// height & size
-	wire.WriteInt8(node.height, w, &n, &err)
+	wire.WriteInt16(node.height, w, &n, &err)
 	wire.WriteVarint(node.size, w, &n, &err)
 	// key is not written for inner nodes, unlike writePersistBytes
 
@@ -259,7 +261,7 @@ func (node *IAVLNode) save(t *IAVLTree) {
 // NOTE: sets hashes recursively
 func (node *IAVLNode) writePersistBytes(t *IAVLTree, w io.Writer) (n int, err error) {
 	// node header
-	wire.WriteInt8(node.height, w, &n, &err)
+	wire.WriteInt16(node.height, w, &n, &err)
 	wire.WriteVarint(node.size, w, &n, &err)
 	// key (unlike writeHashBytes, key is written for inner nodes)
 	wire.WriteByteSlice(node.key, w, &n, &err)
@@ -435,7 +437,7 @@ func (node *IAVLNode) rotateLeft(t *IAVLTree) *IAVLNode {
 
 // NOTE: mutates height and size
 func (node *IAVLNode) calcHeightAndSize(t *IAVLTree) {
-	node.height = maxInt8(node.getLeftNode(t).height, node.getRightNode(t).height) + 1
+	node.height = maxInt16(node.getLeftNode(t).height, node.getRightNode(t).height) + 1
 	node.size = node.getLeftNode(t).size + node.getRightNode(t).size
 }
 

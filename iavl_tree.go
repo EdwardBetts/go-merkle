@@ -180,7 +180,7 @@ func (t *IAVLTree) Size() int {
 }
 
 // Height returns the maximum tree height.
-func (t *IAVLTree) Height() int8 {
+func (t *IAVLTree) Height() int16 {
 	//fmt.Printf("Version ")
 	root := t.GetRoot(t.version)
 	if root == nil {
