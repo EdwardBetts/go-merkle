@@ -2,7 +2,7 @@ package merkle
 
 import (
 	"bytes"
-	//"fmt"
+	"fmt"
 	"io"
 
 	"golang.org/x/crypto/ripemd160"
@@ -26,12 +26,18 @@ type IAVLNode struct {
 	persisted bool
 }
 
-func NewIAVLNode(key []byte, value []byte) *IAVLNode {
+func (n *IAVLNode) Sprintf() string {
+	return fmt.Sprintf("[%X/%X] (%d,%d,%d) %X,%X,%X -- %p,%p", n.key, n.value, n.version, n.height, n.size,
+		n.hash, n.leftHash, n.rightHash, n.leftNode, n.rightNode)
+}
+
+func NewIAVLNode(key []byte, value []byte, version int) *IAVLNode {
 	return &IAVLNode{
-		key:    key,
-		value:  value,
-		height: 0,
-		size:   1,
+		key:     key,
+		value:   value,
+		version: version,
+		height:  0,
+		size:    1,
 	}
 }
 
@@ -41,7 +47,7 @@ func MakeIAVLNode(buf []byte, t *IAVLTree) (node *IAVLNode, err error) {
 	node = &IAVLNode{}
 
 	// node header
-	node.height = int8(buf[0])
+	node.height = int8(buf[0]) // TODO: Is this right?
 	buf = buf[1:]
 
 	var n int
@@ -278,27 +284,31 @@ func (node *IAVLNode) writePersistBytes(t *IAVLTree, w io.Writer) (n int, err er
 	return
 }
 
+// set the leaf and internal nodes.
 func (node *IAVLNode) set(t *IAVLTree, key []byte, value []byte) (newSelf *IAVLNode, updated bool) {
 	if node.height == 0 {
 		cmp := bytes.Compare(key, node.key)
 		if cmp < 0 {
+			// Add to the left
 			return &IAVLNode{
 				key:       node.key,
 				height:    1,
 				size:      2,
-				leftNode:  NewIAVLNode(key, value),
+				leftNode:  NewIAVLNode(key, value, t.version),
 				rightNode: node,
 			}, false
 		} else if cmp == 0 {
+			// Replace an existing node
 			removeOrphan(t, node)
-			return NewIAVLNode(key, value), true
+			return NewIAVLNode(key, value, t.version), true
 		} else {
+			// Add to the right
 			return &IAVLNode{
 				key:       key,
 				height:    1,
 				size:      2,
 				leftNode:  node,
-				rightNode: NewIAVLNode(key, value),
+				rightNode: NewIAVLNode(key, value, t.version),
 			}, false
 		}
 	} else {
