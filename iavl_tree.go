@@ -690,7 +690,7 @@ func (ndb *nodeDB) cacheNode(node *IAVLNode) {
 // Prune removes old orphans from the database
 func (ndb *nodeDB) Prune() {
 
-	//ndb.db.SetSync(nil, nil)
+	ndb.db.SetSync(nil, nil)
 	//ndb.db.DeleteSync(nil)
 	batch := ndb.db.NewBatch()
 
@@ -711,8 +711,11 @@ func (ndb *nodeDB) Prune() {
 	ndb.deletes = make([][]byte, 0)
 	ndb.SaveDeletes(batch)
 
-	fmt.Printf("Writing out the Batch")
+	fmt.Printf("Pruning the database\n")
 	batch.Write()
+}
+
+func (ndb *nodeDB) DeleteAll() {
 }
 
 // Commit the changes to the database
