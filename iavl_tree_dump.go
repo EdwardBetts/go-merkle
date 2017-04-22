@@ -1,6 +1,7 @@
 package merkle
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
@@ -14,26 +15,40 @@ type KeyValueMapping struct {
 	Value Formatter
 }
 
-func defaultMapping(value []byte) string {
-	return fmt.Sprintf("%X", value)
-}
+// Flip back and forth between ascii and hex.
+func mixedDisplay(value []byte) string {
 
-func valueMapping(value []byte) string {
-	// underneath make node, wire can throw a panic
-	defer func() {
-		if recover() != nil {
-			return
+	var buffer bytes.Buffer
+	var last []byte
+
+	ascii := true
+	for i := 0; i < len(value); i++ {
+		if value[i] < 32 || value[i] > 126 {
+			if ascii && len(last) > 0 {
+				// only if there are 6 or more chars
+				if len(last) > 5 {
+					buffer.WriteString(fmt.Sprintf("%s", last))
+					last = nil
+				}
+				ascii = false
+			}
+		} else {
+			/*
+				if !ascii && len(last) > 0 {
+					buffer.WriteString(fmt.Sprintf("%X", last))
+					last = nil
+					ascii = true
+				}
+			*/
 		}
-	}()
-
-	// test to see if this is a node
-	node, err := MakeIAVLNode(value, nil)
-	if err == nil {
-		return nodeMapping(node)
+		last = append(last, value[i])
 	}
-
-	// Unknown value type
-	return stateMapping(value)
+	if ascii {
+		buffer.WriteString(fmt.Sprintf("%s", last))
+	} else {
+		buffer.WriteString(fmt.Sprintf("%X", last))
+	}
+	return buffer.String()
 }
 
 // This is merkleeyes state, that it is writing to a specific key
@@ -42,13 +57,14 @@ type state struct {
 	Height uint64
 }
 
+// Try to interpet as merkleeyes state
 func stateMapping(value []byte) string {
 	var s state
 	err := wire.ReadBinaryBytes(value, &s)
-	if err != nil {
-		return defaultMapping(value)
+	if err != nil || s.Height > 500 {
+		return mixedDisplay(value)
 	}
-	return fmt.Sprintf("Height:%d,[%X]", s.Height, s.Hash)
+	return fmt.Sprintf("Height:%d, [%X]", s.Height, s.Hash)
 }
 
 // This is basecoin accounts, that it is writing to a specific key
@@ -67,16 +83,10 @@ type coin struct {
 	Amount int64
 }
 
+// Perhaps this is an IAVL tree node?
 func nodeMapping(node *IAVLNode) string {
-	var prefix = "base/a/"
 
-	// The key might have come from basecoin
-	formattedKey := string(node.key)
-	if strings.HasPrefix(formattedKey, prefix) {
-		formattedKey = strings.TrimPrefix(formattedKey, prefix)
-	} else {
-		prefix = ""
-	}
+	formattedKey := mixedDisplay(node.key)
 
 	var formattedValue string
 	var acc account
@@ -84,27 +94,49 @@ func nodeMapping(node *IAVLNode) string {
 	if err != nil {
 		formattedValue = fmt.Sprintf("%v", acc)
 	} else {
-		formattedValue = fmt.Sprintf("%X", node.value)
+		formattedValue = mixedDisplay(node.value)
 	}
 
 	// Generic key, but still a node
-	return fmt.Sprintf("IAVLNode: [height: %d, key: %s%X, value: %s, hash: %X, leftHash: %X, rightHash: %X]",
-		node.height, prefix, formattedKey, formattedValue, node.hash, node.leftHash, node.rightHash)
+	return fmt.Sprintf("IAVLNode: [height: %d, key: %s, value: %s, hash: %X, leftHash: %X, rightHash: %X]",
+		node.height, formattedKey, formattedValue, node.hash, node.leftHash, node.rightHash)
 }
 
-// Dump everything in the database
-func (t *IAVLTree) Dump(mapping *KeyValueMapping) {
-	if t.root == nil {
+// Try everything and see what sticks...
+func overallMapping(value []byte) string {
+	// underneath make node, wire can throw a panic
+	defer func() {
+		if recover() != nil {
+			fmt.Printf("Recovering from an error\n")
+			return
+		}
+	}()
+
+	// test to see if this is a node
+	node, err := MakeIAVLNode(value, nil)
+	if err == nil && node.height < 100 && node.key != nil {
+		return nodeMapping(node)
+	}
+
+	// Unknown value type
+	return stateMapping(value)
+}
+
+// Dump everything from the database
+func (t *IAVLTree) Dump(verbose bool, mapping *KeyValueMapping) {
+	if verbose && t.root == nil {
 		fmt.Printf("No root loaded into memory\n")
 	}
 
 	if mapping == nil {
-		mapping = &KeyValueMapping{Key: defaultMapping, Value: valueMapping}
+		mapping = &KeyValueMapping{Key: mixedDisplay, Value: overallMapping}
 	}
 
-	stats := t.ndb.db.Stats()
-	for key, value := range stats {
-		fmt.Printf("%s:\n\t%s\n", key, value)
+	if verbose {
+		stats := t.ndb.db.Stats()
+		for key, value := range stats {
+			fmt.Printf("%s:\n\t%s\n", key, value)
+		}
 	}
 
 	iter := t.ndb.db.Iterator()

@@ -14,6 +14,7 @@ import (
 var (
 	dbName    string
 	dbDir     string
+	verbose   bool
 	cacheSize int
 )
 
@@ -28,6 +29,7 @@ func init() {
 	RootCmd.AddCommand(dumpCmd)
 	dumpCmd.Flags().StringVarP(&dbName, "name", "n", "merkleeyes", "Name db dir")
 	dumpCmd.Flags().StringVarP(&dbDir, "path", "p", "./", "Dir path to DB")
+	dumpCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Print everything")
 	dumpCmd.Flags().IntVarP(&cacheSize, "cachesize", "c", 10000, "Size of the Cache")
 }
 
@@ -38,15 +40,21 @@ func DumpDatabase(cmd *cobra.Command, args []string) {
 		cmn.Exit("No existing database: " + dbPath)
 	}
 
-	fmt.Printf("Dumping DB %s (%s)...\n", dbName, dbType)
+	if verbose {
+		fmt.Printf("Dumping DB %s (%s)...\n", dbName, dbType)
+	}
 
 	database := db.NewDB(dbName, db.LevelDBBackendStr, "./")
 
-	fmt.Printf("Database: %v\n", database)
+	if verbose {
+		fmt.Printf("Database: %v\n", database)
+	}
 
 	tree := merkle.NewIAVLTree(cacheSize, database)
 
-	fmt.Printf("Tree: %v\n", tree)
+	if verbose {
+		fmt.Printf("Tree: %v\n", tree)
+	}
 
-	tree.Dump(nil)
+	tree.Dump(verbose, nil)
 }
