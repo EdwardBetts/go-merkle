@@ -98,14 +98,14 @@ type action struct {
 func TestTable(t *testing.T) {
 
 	pairs := []pair{
-		pair{"aaaaa", "aaaaa"},
-		pair{"bbbbb", "bbbbb"},
-		pair{"ccccc", "ccccc"},
-		pair{"ddddd", "ddddd"},
-		pair{"1", "one"},
-		pair{"2", "two"},
-		pair{"3", "three"},
-		pair{"4", "four"},
+		pair{"aaaaa", "aaaaa - value"},
+		pair{"bbbbb", "bbbbb - value"},
+		pair{"ccccc", "ccccc - value"},
+		pair{"ddddd", "ddddd - value"},
+		pair{"00001", "one - value"},
+		pair{"00002", "two - value"},
+		pair{"00003", "three - value"},
+		pair{"00004", "four - value"},
 	}
 
 	actions := []action{
@@ -130,7 +130,7 @@ func TestTable(t *testing.T) {
 		action{SETVALUE, &pairs[4], false, "Should be a create"},
 		action{SETVALUE, &pairs[5], false, "Should be a create"},
 		action{SETVALUE, &pairs[6], false, "Should be a create"},
-		action{SETVALUE, &pairs[7], false, "Should be a create"},
+		action{SETVALUE, &pairs[7], false, "Will fail second time through"},
 		action{SAVETREE, nil, true, "Should return a value"},
 
 		action{REMOVEVALUE, &pairs[0], true, "Should delete"},
@@ -147,9 +147,14 @@ func TestTable(t *testing.T) {
 	db := db.NewDB("testing", "goleveldb", "./")
 	var tree *IAVLTree = NewIAVLTree(0, db)
 
-	for i := 0; i < 40; i++ {
+	// make sure there is nothing in this database if it already exists
+	tree.ndb.DeleteAll()
+
+	for i := 0; i < 50; i++ {
 		processActions(t, tree, actions)
 	}
+
+	//tree.ndb.BatchDeleteAll()
 }
 
 func processActions(t *testing.T, tree *IAVLTree, actions []action) {

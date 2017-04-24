@@ -16,10 +16,10 @@ import (
 )
 
 // Keys for administrative persistent data
-var rootsKey = []byte("go-merkle:roots")      // Database key for the list of roots
-var versionKey = []byte("go-merkle:version")  // Database key for the version
-var orphansKey = []byte("go-merkle:orphans/") // Partial database key for each set of orphans
-var deletesKey = []byte("go-merkle:deletes")  // Database key for roots to be pruned
+var rootsKey = []byte("go-merkle.roots")      // Database key for the list of roots
+var versionKey = []byte("go-merkle.version")  // Database key for the version
+var orphansKey = []byte("go-merkle.orphans/") // Partial database key for each set of orphans
+var deletesKey = []byte("go-merkle.deletes")  // Database key for roots to be pruned
 
 // Fixed number of versions
 const rootsMax = 3
@@ -98,14 +98,16 @@ func (t *IAVLTree) GetRoot(version int) *IAVLNode {
 
 	index := t.version - version
 
-	root := GetValue(t.roots, index)
-	if root == nil {
+	element := GetValue(t.roots, index)
+	if element == nil {
 		//fmt.Printf("Missing Root %d for index %d\n", version, index)
 		return nil
 	}
 
-	//fmt.Printf("Found\n")
-	return root.(*IAVLNode)
+	root := element.(*IAVLNode)
+	root.validate(t)
+
+	return root
 }
 
 func (t *IAVLTree) PrintRoots() {
@@ -245,7 +247,10 @@ func (t *IAVLTree) Set(key []byte, value []byte) (updated bool) {
 	}
 
 	//fmt.Printf("Added new Root\n")
+	root.validate(t)
 	root, updated = root.set(t, key, value)
+	root.validate(t)
+
 	SetValue(t.roots, 0, root)
 
 	root = t.GetRoot(t.version) // TEST
@@ -284,22 +289,23 @@ func (t *IAVLTree) Save() []byte {
 	//fmt.Printf("****** Save\n")
 	//t.PrintRoots()
 
-	root := t.GetRoot(t.version)
-	if root == nil {
-		//fmt.Printf("No root\n")
-		return nil
-	}
+	// Might be the same
 	first := t.roots.Front()
 	firstNode := first.Value.(*IAVLNode)
+
+	if firstNode == nil {
+		return nil
+	} else if t.ndb != nil {
+		firstNode.save(t)
+	}
+
 	last := t.roots.Back()
+	lastNode := last.Value.(*IAVLNode)
 
 	if t.ndb != nil {
-		root.save(t)
-
 		// TODO: should be a loop, if the rootsMax can change
 		if rootsMax > 1 && t.roots.Len()+1 > rootsMax {
-			//fmt.Printf("##### Cleanup!!! ######\n")
-			lastNode := last.Value.(*IAVLNode)
+			fmt.Printf("##### Cleanup!!! ######\n")
 
 			// TODO: should be locking any changes to deletes?
 			t.ndb.deletes = append(t.ndb.deletes, lastNode.hash)
@@ -308,11 +314,14 @@ func (t *IAVLTree) Save() []byte {
 			t.ndb.SaveDeletes(t.ndb.batch)
 		}
 
+		fmt.Printf("Orphan Count %d\n", len(t.ndb.orphans))
 		t.ndb.SaveOrphans(firstNode.hash, t.ndb.orphans)
 		t.ndb.orphans = make([][]byte, 0)
 
+		t.roots.PushFront(firstNode)
 		t.ndb.SaveRoots(t)
 		t.ndb.SaveVersion(t)
+		t.version++
 
 		t.ndb.Commit()
 
@@ -323,17 +332,14 @@ func (t *IAVLTree) Save() []byte {
 		t.HashWithCount()
 		if rootsMax > 1 && t.roots.Len()+1 > rootsMax {
 			t.roots.Remove(last)
+			t.roots.PushFront(firstNode)
+			t.version++
 		}
-	}
-
-	if rootsMax > 1 {
-		t.roots.PushFront(firstNode)
-		t.version++
 	}
 
 	// What's the final status?
 	//t.PrintRoots()
-	root = t.GetRoot(t.version)
+	root := t.GetRoot(t.version)
 	//fmt.Printf("root = '%X'\n", root.hash)
 
 	return root.hash
@@ -580,12 +586,12 @@ func (ndb *nodeDB) GetOrphans(hash []byte) [][]byte {
 	key = append(key, hash...)
 
 	orphans := make([][]byte, 0)
+	//orphans = append(orphans, key) // Must include the original storage key
 
 	buf := ndb.db.Get(key)
 	if len(buf) == 0 {
-		//cmn.PanicSanity(cmn.Fmt("Orphans missing for key %X", key))
-		//fmt.Printf("Missing orphans for key %X\n", key)
-		return orphans
+		fmt.Printf("No orphans for key %X\n", key)
+		return nil
 	}
 
 	count := int(wire.GetInt32(buf))
@@ -610,6 +616,11 @@ func (ndb *nodeDB) SaveOrphans(hash []byte, orphans [][]byte) {
 
 	count := int32(len(ndb.orphans))
 
+	if count == 0 {
+		// Don't bother saving
+		return
+	}
+
 	buf, n, err := bytes.NewBuffer(nil), new(int), new(error)
 	wire.WriteInt32(count, buf, n, err)
 	for i := 0; i < int(count); i++ {
@@ -623,7 +634,9 @@ func (ndb *nodeDB) SaveOrphans(hash []byte, orphans [][]byte) {
 func (ndb *nodeDB) GetDeletes() {
 	buf := ndb.db.Get(deletesKey)
 	if len(buf) == 0 {
-		cmn.PanicSanity(cmn.Fmt("Delete list is missing"))
+		//cmn.PanicSanity(cmn.Fmt("Delete list is missing"))
+		fmt.Printf("Nothing to delete currently\n")
+		return
 	}
 
 	//fmt.Printf("Have Versions: %X\n", buf)
@@ -690,24 +703,32 @@ func (ndb *nodeDB) cacheNode(node *IAVLNode) {
 // Prune removes old orphans from the database
 func (ndb *nodeDB) Prune() {
 
-	ndb.db.SetSync(nil, nil)
-	//ndb.db.DeleteSync(nil)
 	batch := ndb.db.NewBatch()
 
 	// Clear out the delete slice from the database
 	for i := 0; i < len(ndb.deletes); i++ {
+
 		nodes := ndb.GetOrphans(ndb.deletes[i])
-		for j := 0; j < len(nodes); j++ {
-			//fmt.Printf("Adding %X to be deleted\n", nodes[j])
-			batch.Delete(nodes[j])
+		if nodes != nil {
+			for j := 0; j < len(nodes); j++ {
+				fmt.Printf("Delete Node %X\n", nodes[j])
+				batch.Delete(nodes[j])
+			}
+
+			// Only delete the root if there were children
+			// TODO: Leaking roots, because of rotates
+			//fmt.Printf("Delete Root %X\n", ndb.deletes[i])
+			//batch.Delete(ndb.deletes[i])
 		}
-		//fmt.Printf("Adding root %X to be deleted\n", ndb.deletes[i])
-		batch.Delete(ndb.deletes[i])
+
+		// Delete the list itself
+		key := orphansKey
+		key = append(key, ndb.deletes[i]...)
+		fmt.Printf("Delete Key %X\n", key)
+		batch.Delete(key)
 	}
 
 	//TODO: Should be locking any changes to deletes.
-	//ndb.mtx.Lock()
-	//defer ndb.mtx.Unlock()
 	ndb.deletes = make([][]byte, 0)
 	ndb.SaveDeletes(batch)
 
@@ -716,6 +737,19 @@ func (ndb *nodeDB) Prune() {
 }
 
 func (ndb *nodeDB) DeleteAll() {
+	iter := ndb.db.Iterator()
+	for iter.Next() {
+		ndb.db.DeleteSync(iter.Key())
+	}
+}
+
+func (ndb *nodeDB) BatchDeleteAll() {
+	batch := ndb.db.NewBatch()
+	iter := ndb.db.Iterator()
+	for iter.Next() {
+		batch.Delete(iter.Key())
+	}
+	batch.Write()
 }
 
 // Commit the changes to the database
@@ -725,9 +759,7 @@ func (ndb *nodeDB) Commit() {
 
 	// Write saves & orphan deletes
 	ndb.batch.Write()
-	ndb.db.SetSync(nil, nil)
-	ndb.batch = ndb.db.NewBatch()
+	//ndb.db.SetSync(nil, nil)
 
-	// Shift orphans
-	//ndb.orphans = make(map[string]struct{})
+	ndb.batch = ndb.db.NewBatch()
 }
