@@ -130,7 +130,7 @@ func TestTable(t *testing.T) {
 		action{SETVALUE, &pairs[4], false, "Should be a create"},
 		action{SETVALUE, &pairs[5], false, "Should be a create"},
 		action{SETVALUE, &pairs[6], false, "Should be a create"},
-		action{SETVALUE, &pairs[7], false, "Will fail second time through"},
+		action{SETVALUE, &pairs[7], false, "Should be a create"},
 		action{SAVETREE, nil, true, "Should return a value"},
 
 		action{REMOVEVALUE, &pairs[0], true, "Should delete"},
@@ -150,7 +150,7 @@ func TestTable(t *testing.T) {
 	// make sure there is nothing in this database if it already exists
 	tree.ndb.DeleteAll()
 
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 10; i++ {
 		processActions(t, tree, actions)
 	}
 
@@ -158,7 +158,7 @@ func TestTable(t *testing.T) {
 }
 
 func processActions(t *testing.T, tree *IAVLTree, actions []action) {
-	verbose := true
+	verbose := false
 
 	for i := range actions {
 		var status bool

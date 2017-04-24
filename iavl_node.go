@@ -49,8 +49,6 @@ func MakeIAVLNode(buf []byte, t *IAVLTree) (node *IAVLNode, err error) {
 	// node header
 	node.height = wire.GetInt16(buf)
 	buf = buf[2:]
-	//node.height = int8(buf[0]) // TODO: Is this right?
-	//buf = buf[1:]
 
 	var n int
 	node.size, n, err = wire.GetVarint(buf)
@@ -421,7 +419,7 @@ func (node *IAVLNode) remove(t *IAVLTree, key []byte) (
 			removeOrphan(t, node)
 			return nil, nil, nil, node.value, true
 		} else {
-			fmt.Printf("##### Removing Node that doesn't exist???\n")
+			//fmt.Printf("##### Removing Node that doesn't exist???\n")
 			return node.hash, node, nil, nil, false
 		}
 	} else {
@@ -635,14 +633,14 @@ func (node *IAVLNode) rmd(t *IAVLTree) *IAVLNode {
 func removeOrphan(t *IAVLTree, node *IAVLNode) {
 	// intermediate node, it will be garbage collected
 	if !node.persisted {
-		fmt.Printf("Orphaned an Internal node %X\n", node.hash)
+		//fmt.Printf("Orphaned an Internal node %X\n", node.hash)
 		return
 	}
 	// an in memory tree
 	if t.ndb == nil {
-		fmt.Printf("Orphaned an In-memory node %X\n", node.hash)
+		//fmt.Printf("Orphaned an In-memory node %X\n", node.hash)
 		return
 	}
-	fmt.Printf("Orphaned a Persisted node %X\n", node.hash)
+	//fmt.Printf("Orphaned a Persisted node %X\n", node.hash)
 	t.ndb.RemoveNode(t, node)
 }

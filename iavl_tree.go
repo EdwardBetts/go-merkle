@@ -305,7 +305,7 @@ func (t *IAVLTree) Save() []byte {
 	if t.ndb != nil {
 		// TODO: should be a loop, if the rootsMax can change
 		if rootsMax > 1 && t.roots.Len()+1 > rootsMax {
-			fmt.Printf("##### Cleanup!!! ######\n")
+			//fmt.Printf("##### Cleanup!!! ######\n")
 
 			// TODO: should be locking any changes to deletes?
 			t.ndb.deletes = append(t.ndb.deletes, lastNode.hash)
@@ -314,7 +314,7 @@ func (t *IAVLTree) Save() []byte {
 			t.ndb.SaveDeletes(t.ndb.batch)
 		}
 
-		fmt.Printf("Orphan Count %d\n", len(t.ndb.orphans))
+		//fmt.Printf("Orphan Count %d\n", len(t.ndb.orphans))
 		t.ndb.SaveOrphans(firstNode.hash, t.ndb.orphans)
 		t.ndb.orphans = make([][]byte, 0)
 
@@ -590,7 +590,7 @@ func (ndb *nodeDB) GetOrphans(hash []byte) [][]byte {
 
 	buf := ndb.db.Get(key)
 	if len(buf) == 0 {
-		fmt.Printf("No orphans for key %X\n", key)
+		//fmt.Printf("No orphans for key %X\n", key)
 		return nil
 	}
 
@@ -703,6 +703,8 @@ func (ndb *nodeDB) cacheNode(node *IAVLNode) {
 // Prune removes old orphans from the database
 func (ndb *nodeDB) Prune() {
 
+	ndb.db.SetSync(nil, nil)
+	ndb.db.DeleteSync(nil)
 	batch := ndb.db.NewBatch()
 
 	// Clear out the delete slice from the database
@@ -711,20 +713,15 @@ func (ndb *nodeDB) Prune() {
 		nodes := ndb.GetOrphans(ndb.deletes[i])
 		if nodes != nil {
 			for j := 0; j < len(nodes); j++ {
-				fmt.Printf("Delete Node %X\n", nodes[j])
+				//fmt.Printf("Delete Node %X\n", nodes[j])
 				batch.Delete(nodes[j])
 			}
-
-			// Only delete the root if there were children
-			// TODO: Leaking roots, because of rotates
-			//fmt.Printf("Delete Root %X\n", ndb.deletes[i])
-			//batch.Delete(ndb.deletes[i])
 		}
 
 		// Delete the list itself
 		key := orphansKey
 		key = append(key, ndb.deletes[i]...)
-		fmt.Printf("Delete Key %X\n", key)
+		//fmt.Printf("Delete Key %X\n", key)
 		batch.Delete(key)
 	}
 
@@ -732,7 +729,7 @@ func (ndb *nodeDB) Prune() {
 	ndb.deletes = make([][]byte, 0)
 	ndb.SaveDeletes(batch)
 
-	fmt.Printf("Pruning the database\n")
+	//fmt.Printf("Pruning the database\n")
 	batch.Write()
 }
 
@@ -759,7 +756,6 @@ func (ndb *nodeDB) Commit() {
 
 	// Write saves & orphan deletes
 	ndb.batch.Write()
-	//ndb.db.SetSync(nil, nil)
 
 	ndb.batch = ndb.db.NewBatch()
 }
