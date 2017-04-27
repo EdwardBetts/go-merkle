@@ -3,7 +3,6 @@ package merkle
 import (
 	"bytes"
 	"fmt"
-	"strings"
 
 	wire "github.com/tendermint/go-wire"
 )
