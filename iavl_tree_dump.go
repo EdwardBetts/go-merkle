@@ -3,6 +3,7 @@ package merkle
 import (
 	"bytes"
 	"fmt"
+	//"strings"
 
 	wire "github.com/tendermint/go-wire"
 )
@@ -89,30 +90,36 @@ func nodeMapping(node *IAVLNode) string {
 
 	var formattedValue string
 	var acc account
+
 	err := wire.ReadBinaryBytes(node.value, &acc)
 	if err != nil {
-		formattedValue = fmt.Sprintf("%v", acc)
-	} else {
 		formattedValue = mixedDisplay(node.value)
+	} else {
+		formattedValue = fmt.Sprintf("%v", acc)
 	}
 
-	// Generic key, but still a node
-	return fmt.Sprintf("IAVLNode: [height: %d, key: %s, value: %s, hash: %X, leftHash: %X, rightHash: %X]",
-		node.height, formattedKey, formattedValue, node.hash, node.leftHash, node.rightHash)
+	if node.height == 0 {
+		return fmt.Sprintf(" LeafNode[height: %d, size %d, key: %s, value: %s]",
+			node.height, node.size, formattedKey, formattedValue)
+	} else {
+		return fmt.Sprintf("InnerNode[height: %d, size %d, key: %s, leftHash: %X, rightHash: %X]",
+			node.height, node.size, formattedKey, node.leftHash, node.rightHash)
+	}
 }
 
 // Try everything and see what sticks...
-func overallMapping(value []byte) string {
+func overallMapping(value []byte) (str string) {
 	// underneath make node, wire can throw a panic
 	defer func() {
 		if recover() != nil {
-			fmt.Printf("Recovering from an error\n")
+			str = fmt.Sprintf("%X", value)
 			return
 		}
 	}()
 
 	// test to see if this is a node
 	node, err := MakeIAVLNode(value, nil)
+
 	if err == nil && node.height < 100 && node.key != nil {
 		return nodeMapping(node)
 	}
@@ -140,6 +147,6 @@ func (t *IAVLTree) Dump(verbose bool, mapping *KeyValueMapping) {
 
 	iter := t.ndb.db.Iterator()
 	for iter.Next() {
-		fmt.Printf("DBkey: [%s] DBValue: [%s]\n", mapping.Key(iter.Key()), mapping.Value(iter.Value()))
+		fmt.Printf("%s: %s\n", mapping.Key(iter.Key()), mapping.Value(iter.Value()))
 	}
 }
